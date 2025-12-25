@@ -13,7 +13,31 @@ executor = ThreadPoolExecutor(max_workers=10)
 # GET ALL ONBOARDING DATA (COMBINED)
 # ============================================
 
-@router.get("", status_code=status.HTTP_200_OK)
+@router.get(
+    "",
+    status_code=status.HTTP_200_OK,
+    summary="Get all onboarding reference data",
+    description="""
+    Get all onboarding reference data in a single request.
+    
+    This endpoint fetches all available options for the onboarding flow in parallel,
+    including goals, dietary patterns, restrictions, preferences, and meal items.
+    
+    **Returns:**
+    - goals: Available health/fitness goals
+    - dietary_patterns: Vegetarian, Vegan, etc.
+    - dietary_restrictions: Food restrictions (No Onion No Garlic, etc.)
+    - medical_restrictions: Medical conditions (Diabetes, etc.)
+    - nutrition_preferences: High Protein, Low Carb, etc.
+    - spice_levels: Mild, Medium, Hot, etc.
+    - cooking_oils: Available cooking oil options
+    - cuisines: Available cuisine types
+    - meal_items: Meal items with meal types and dietary flags
+    
+    **Performance:** All data is fetched in parallel for optimal response time.
+    Only returns active items (is_active = true) ordered by display_order.
+    """
+)
 async def get_all_onboarding_data() -> Dict[str, Any]:
     """
     Get all onboarding reference data in a single request.
@@ -181,7 +205,19 @@ async def get_all_onboarding_data() -> Dict[str, Any]:
 # GET REFERENCE DATA (INDIVIDUAL ENDPOINTS)
 # ============================================
 
-@router.get("/goals", status_code=status.HTTP_200_OK)
+@router.get(
+    "/goals",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available goals",
+    description="""
+    Get all available health and fitness goals for onboarding.
+    
+    Returns a list of active goals (e.g., "Weight Loss", "Muscle Gain", "General Health")
+    ordered by display_order. Only returns goals where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_goals() -> Dict[str, Any]:
     """
     Get all available goals for onboarding.
@@ -213,7 +249,19 @@ async def get_goals() -> Dict[str, Any]:
         )
 
 
-@router.get("/dietary-patterns", status_code=status.HTTP_200_OK)
+@router.get(
+    "/dietary-patterns",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available dietary patterns",
+    description="""
+    Get all available dietary patterns for onboarding.
+    
+    Returns a list of active dietary patterns (e.g., "Vegetarian", "Vegan", "Non-Vegetarian")
+    ordered by display_order. Only returns patterns where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_dietary_patterns() -> Dict[str, Any]:
     """
     Get all available dietary patterns for onboarding.
@@ -245,7 +293,19 @@ async def get_dietary_patterns() -> Dict[str, Any]:
         )
 
 
-@router.get("/dietary-restrictions", status_code=status.HTTP_200_OK)
+@router.get(
+    "/dietary-restrictions",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available dietary restrictions",
+    description="""
+    Get all available dietary restrictions for onboarding.
+    
+    Returns a list of active dietary restrictions (e.g., "No Onion No Garlic", "No Egg")
+    ordered by display_order. Only returns restrictions where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_dietary_restrictions() -> Dict[str, Any]:
     """
     Get all available dietary restrictions for onboarding.
@@ -277,7 +337,19 @@ async def get_dietary_restrictions() -> Dict[str, Any]:
         )
 
 
-@router.get("/medical-restrictions", status_code=status.HTTP_200_OK)
+@router.get(
+    "/medical-restrictions",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available medical restrictions",
+    description="""
+    Get all available medical restrictions for onboarding.
+    
+    Returns a list of active medical restrictions (e.g., "Diabetes", "Hypertension", "PCOS")
+    ordered by display_order. Only returns restrictions where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_medical_restrictions() -> Dict[str, Any]:
     """
     Get all available medical restrictions for onboarding.
@@ -309,7 +381,19 @@ async def get_medical_restrictions() -> Dict[str, Any]:
         )
 
 
-@router.get("/nutrition-preferences", status_code=status.HTTP_200_OK)
+@router.get(
+    "/nutrition-preferences",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available nutrition preferences",
+    description="""
+    Get all available nutrition preferences for onboarding.
+    
+    Returns a list of active nutrition preferences (e.g., "High Protein", "Low Carb", "High Fiber")
+    ordered by display_order. Only returns preferences where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_nutrition_preferences() -> Dict[str, Any]:
     """
     Get all available nutrition preferences for onboarding.
@@ -341,7 +425,19 @@ async def get_nutrition_preferences() -> Dict[str, Any]:
         )
 
 
-@router.get("/spice-levels", status_code=status.HTTP_200_OK)
+@router.get(
+    "/spice-levels",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available spice levels",
+    description="""
+    Get all available spice levels for onboarding.
+    
+    Returns a list of active spice levels (e.g., "Mild", "Medium", "Hot", "Very Hot")
+    ordered by display_order. Only returns levels where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_spice_levels() -> Dict[str, Any]:
     """
     Get all available spice levels for onboarding.
@@ -373,7 +469,19 @@ async def get_spice_levels() -> Dict[str, Any]:
         )
 
 
-@router.get("/cooking-oils", status_code=status.HTTP_200_OK)
+@router.get(
+    "/cooking-oils",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available cooking oils",
+    description="""
+    Get all available cooking oils for onboarding.
+    
+    Returns a list of active cooking oils (e.g., "Olive Oil", "Coconut Oil", "Mustard Oil")
+    ordered by display_order. Only returns oils where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_cooking_oils() -> Dict[str, Any]:
     """
     Get all available cooking oils for onboarding.
@@ -405,7 +513,19 @@ async def get_cooking_oils() -> Dict[str, Any]:
         )
 
 
-@router.get("/cuisines", status_code=status.HTTP_200_OK)
+@router.get(
+    "/cuisines",
+    status_code=status.HTTP_200_OK,
+    summary="Get all available cuisines",
+    description="""
+    Get all available cuisines for onboarding.
+    
+    Returns a list of active cuisines (e.g., "North Indian", "South Indian", "Chinese")
+    ordered by display_order. Only returns cuisines where is_active = true.
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_cuisines() -> Dict[str, Any]:
     """
     Get all available cuisines for onboarding.
@@ -437,7 +557,30 @@ async def get_cuisines() -> Dict[str, Any]:
         )
 
 
-@router.get("/meal-items", status_code=status.HTTP_200_OK)
+@router.get(
+    "/meal-items",
+    status_code=status.HTTP_200_OK,
+    summary="Get all meal items with meal types",
+    description="""
+    Get all meal items with their meal types and dietary preferences.
+    
+    Returns a list of meal items (breakfast, lunch, snacks, dinner) with:
+    - onboarding_meal_item_name: Name of the meal item (e.g., "Idli", "Dal Rice")
+    - onboarding_meal_item_id: Unique ID of the meal item
+    - onboarding_meal_item_image_url: Image URL for the meal item
+    - meal_type_name: Type of meal (e.g., "Breakfast", "Lunch", "Snacks", "Dinner")
+    - meal_type_id: Unique ID of the meal type
+    - is_vegetarian: Boolean flag for vegetarian compatibility
+    - is_eggetarian: Boolean flag for eggetarian compatibility
+    - is_carnitarian: Boolean flag for carnitarian compatibility
+    - is_omnivore: Boolean flag for omnivore compatibility
+    - is_vegan: Boolean flag for vegan compatibility
+    
+    Only returns active meal items (is_active = true).
+    
+    **Note:** Use the main endpoint GET /onboarding to get all data in one request.
+    """
+)
 async def get_meal_items() -> Dict[str, Any]:
     """
     Get all meal items with their meal types and dietary preferences.
