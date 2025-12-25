@@ -134,6 +134,167 @@ User on OTP Screen
 
 ---
 
+## Bearer Token Authentication
+
+### Understanding the Bearer Token
+
+**Important:** The Firebase ID token IS your Bearer token. You don't need to generate a separate token.
+
+### How to Get the Bearer Token
+
+After Firebase successfully verifies the OTP, you get a Firebase ID token:
+
+```javascript
+// React Native example
+const userCredential = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+const user = userCredential.user;
+
+// Get the Firebase ID token - THIS IS YOUR BEARER TOKEN
+const idToken = await user.getIdToken();
+// Store this token securely (e.g., AsyncStorage or SecureStore)
+```
+
+### How to Use the Bearer Token
+
+The same Firebase ID token is used in two ways:
+
+#### 1. Initial Verification (Optional)
+Send it in the request body to verify and get `user_id`:
+```http
+POST /auth/verify-otp
+Content-Type: application/json
+
+{
+    "id_token": "<firebase_id_token>"
+}
+```
+
+#### 2. All Subsequent API Calls
+Use it as a Bearer token in the Authorization header:
+```http
+GET /user/{user_id}
+Authorization: Bearer <firebase_id_token>
+```
+
+### Complete Authentication Flow Example
+
+```javascript
+// Step 1: Get Firebase ID token after OTP verification
+const userCredential = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+const user = userCredential.user;
+const idToken = await user.getIdToken();
+
+// Step 2: Store token securely
+await AsyncStorage.setItem('firebase_id_token', idToken);
+
+// Step 3: Verify with backend (optional - to get user_id)
+const verifyResponse = await fetch('http://localhost:8000/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id_token: idToken })
+});
+const { user_id } = await verifyResponse.json();
+await AsyncStorage.setItem('user_id', user_id);
+
+// Step 4: Use the same idToken for all authenticated API calls
+const profileResponse = await fetch(`http://localhost:8000/user/${user_id}`, {
+    headers: {
+        'Authorization': `Bearer ${idToken}`
+    }
+});
+const profileData = await profileResponse.json();
+```
+
+### Token Expiration and Refresh
+
+**Firebase ID tokens expire after 1 hour.**
+
+#### Handling Expired Tokens
+
+**Option 1: Refresh Token Automatically**
+```javascript
+// Get fresh token (force refresh)
+const freshToken = await user.getIdToken(true);
+
+// Update stored token
+await AsyncStorage.setItem('firebase_id_token', freshToken);
+
+// Retry API call with fresh token
+```
+
+**Option 2: Handle 401 Errors**
+```javascript
+async function makeAuthenticatedRequest(url, options = {}) {
+    let idToken = await AsyncStorage.getItem('firebase_id_token');
+    
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${idToken}`
+        }
+    });
+    
+    // If token expired, refresh and retry
+    if (response.status === 401) {
+        const user = auth().currentUser;
+        if (user) {
+            // Force refresh token
+            idToken = await user.getIdToken(true);
+            await AsyncStorage.setItem('firebase_id_token', idToken);
+            
+            // Retry request with fresh token
+            return fetch(url, {
+                ...options,
+                headers: {
+                    ...options.headers,
+                    'Authorization': `Bearer ${idToken}`
+                }
+            });
+        } else {
+            // User not logged in, redirect to login
+            navigateToLogin();
+        }
+    }
+    
+    return response;
+}
+```
+
+### Important Points
+
+1. **Same Token, Two Uses:**
+   - Request body: `POST /auth/verify-otp` with `{ "id_token": "..." }`
+   - Authorization header: `Authorization: Bearer <firebase_id_token>` for all other endpoints
+
+2. **Store Securely:**
+   - Use `AsyncStorage` (React Native) or `SecureStore` (Expo) to store the token
+   - Don't store in plain text or log it
+
+3. **Token Lifetime:**
+   - Tokens expire after 1 hour
+   - Refresh automatically when you get 401 errors
+   - Or refresh proactively before expiration
+
+4. **All Protected Endpoints Require Bearer Token:**
+   - `GET /user/{user_id}` - Get user profile
+   - `PUT /user/{user_id}/profile` - Update user profile
+   - `PUT /user/{user_id}/onboarding` - Save onboarding data
+   - `GET /user/{user_id}/onboarding-status` - Check onboarding status
+   - `POST /cook/user/{user_id}/cooks` - Add cook
+   - `GET /cook/user/{user_id}/cooks` - Get all cooks
+   - `GET /cook/user/{user_id}/cooks/{cook_id}` - Get specific cook
+   - `PUT /cook/user/{user_id}/cooks/{cook_id}` - Update cook
+   - `DELETE /cook/user/{user_id}/cooks/{cook_id}` - Delete cook
+
+5. **Public Endpoints (No Token Required):**
+   - `POST /auth/verify-otp` - Login endpoint
+   - `GET /auth/health` - Health check
+   - `GET /onboarding` - Get onboarding reference data
+   - `GET /onboarding/*` - All onboarding reference endpoints
+
+---
+
 ## API Endpoints
 
 ### Base URL
@@ -182,11 +343,19 @@ Production: https://api.foodeasy.com
 
 ### 2. Update User Profile
 
-**Endpoint:** `PUT /auth/user/{user_id}/profile`
+**Endpoint:** `PUT /user/{user_id}/profile`
 
 **Description:** Add/update user's name
 
 **When to call:** After new user login, when user enters their name
+
+**Authentication Required:** Yes (Bearer token in Authorization header)
+
+**Request Headers:**
+```http
+Authorization: Bearer <firebase_id_token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
@@ -221,11 +390,18 @@ Production: https://api.foodeasy.com
 
 ### 3. Get User Profile
 
-**Endpoint:** `GET /auth/user/{user_id}`
+**Endpoint:** `GET /user/{user_id}`
 
 **Description:** Get complete user information
 
 **When to call:** When loading user profile, checking if user has name, etc.
+
+**Authentication Required:** Yes (Bearer token in Authorization header)
+
+**Request Headers:**
+```http
+Authorization: Bearer <firebase_id_token>
+```
 
 **Success Response (200):**
 ```json
@@ -283,27 +459,29 @@ sendOTP(phoneNumber) → returns confirmation object
 #### B. Verify OTP
 ```javascript
 // Function signature
-verifyOTP(confirmation, otpCode) → returns { user_id, is_new_user }
+verifyOTP(confirmation, otpCode) → returns { user_id, is_new_user, id_token }
 
 // What it does:
 // 1. Calls Firebase: confirmation.confirm(otpCode)
 // 2. If OTP correct: Firebase returns user with ID token
 // 3. Gets ID token: user.getIdToken()
-// 4. Calls backend: POST /auth/verify-otp with id_token
+// 4. Calls backend: POST /auth/verify-otp with id_token in request body
 // 5. Backend returns: { user_id, phone_number, is_new_user }
-// 6. Store user_id in AsyncStorage
-// 7. Return result
+// 6. Store user_id AND id_token in AsyncStorage (id_token is your Bearer token)
+// 7. Return result including id_token
 ```
 
 #### C. Update Profile
 ```javascript
 // Function signature
-updateProfile(userId, fullName) → returns updated user data
+updateProfile(userId, fullName, idToken) → returns updated user data
 
 // What it does:
-// 1. Calls backend: PUT /auth/user/{userId}/profile
-// 2. Sends: { "full_name": fullName }
-// 3. Returns success/error
+// 1. Gets stored Firebase ID token (or use passed token)
+// 2. Calls backend: PUT /user/{userId}/profile
+// 3. Headers: { "Authorization": "Bearer " + idToken }
+// 4. Sends: { "full_name": fullName }
+// 5. Returns success/error
 ```
 
 #### D. Logout
@@ -493,13 +671,23 @@ const phone = "+919876543210";
 
 ### Token Expiration
 
-Firebase ID tokens expire after 1 hour. If you get 401 error from backend, user needs to login again.
+Firebase ID tokens expire after 1 hour. 
+
+**Handling Expired Tokens:**
+- If you get 401 error from backend, refresh the token: `await user.getIdToken(true)`
+- Update stored token and retry the request
+- If refresh fails, redirect user to login screen
 
 ### Storage
 
-Store only `user_id` locally (in AsyncStorage). Don't store:
-- Firebase ID token (it expires)
-- OTP code
+Store these in AsyncStorage:
+- `user_id` - User identifier from backend
+- `firebase_id_token` - Firebase ID token (used as Bearer token for API calls)
+
+**Important:** You DO need to store the Firebase ID token because it's used as the Bearer token for all authenticated API calls. Just remember to refresh it when it expires.
+
+Don't store:
+- OTP code (never store this)
 - Phone number (optional, for UX only)
 
 ### Security
@@ -588,9 +776,22 @@ Firebase issues: Check Firebase Console → Authentication → Usage
 
 ### API Endpoints Summary
 ```
+Public Endpoints (No Auth Required):
 POST   /auth/verify-otp              - Verify OTP and get user_id
-PUT    /auth/user/{user_id}/profile  - Update user name
-GET    /auth/user/{user_id}          - Get user profile
+GET    /auth/health                  - Health check
+GET    /onboarding                   - Get all onboarding reference data
+GET    /onboarding/*                 - Get specific onboarding reference data
+
+Protected Endpoints (Bearer Token Required):
+GET    /user/{user_id}               - Get user profile
+PUT    /user/{user_id}/profile       - Update user profile
+PUT    /user/{user_id}/onboarding    - Save onboarding data
+GET    /user/{user_id}/onboarding-status - Check onboarding status
+POST   /cook/user/{user_id}/cooks    - Add cook
+GET    /cook/user/{user_id}/cooks    - Get all cooks
+GET    /cook/user/{user_id}/cooks/{cook_id} - Get specific cook
+PUT    /cook/user/{user_id}/cooks/{cook_id} - Update cook
+DELETE /cook/user/{user_id}/cooks/{cook_id} - Delete cook
 ```
 
 ### Firebase Methods Summary
@@ -603,7 +804,9 @@ auth().signOut()                      - Logout
 
 ### Key Data Flow
 ```
-Phone Number → Firebase → OTP → User enters OTP → Firebase Token → Backend → user_id → AsyncStorage
+Phone Number → Firebase → OTP → User enters OTP → Firebase ID Token → 
+Backend (/auth/verify-otp) → user_id → Store both user_id and ID Token → 
+Use ID Token as Bearer token for all authenticated API calls
 ```
 
 ---
