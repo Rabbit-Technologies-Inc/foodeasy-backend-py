@@ -4,13 +4,15 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from dotenv import load_dotenv
 import os
+import json
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 
 load_dotenv()
 
-# Get Firebase credentials path from environment
+# Get Firebase credentials - support both file path and JSON content from .env
 FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH")
+FIREBASE_CREDENTIALS_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON")
 
 # Token expiration configuration (in seconds)
 # Default: 3600 seconds (1 hour) - Firebase ID tokens have fixed 1-hour expiration
@@ -25,11 +27,32 @@ if TOKEN_EXPIRATION_SECONDS > MAX_TOKEN_EXPIRATION_SECONDS:
     print(f"Warning: TOKEN_EXPIRATION_SECONDS ({TOKEN_EXPIRATION_SECONDS}) exceeds Firebase limit ({MAX_TOKEN_EXPIRATION_SECONDS}). Using {MAX_TOKEN_EXPIRATION_SECONDS}.")
     TOKEN_EXPIRATION_SECONDS = MAX_TOKEN_EXPIRATION_SECONDS
 
-# Validate credentials file exists
-if not os.path.exists(FIREBASE_CREDENTIALS_PATH):
+# Initialize credentials - support both file path and JSON content
+FIREBASE_CREDENTIALS_DICT: Optional[Dict[str, Any]] = None
+
+if FIREBASE_CREDENTIALS_JSON:
+    # Use JSON content from environment variable
+    try:
+        # Parse JSON to validate it's valid
+        FIREBASE_CREDENTIALS_DICT = json.loads(FIREBASE_CREDENTIALS_JSON)
+        FIREBASE_CREDENTIALS_PATH = None  # Clear path since we're using JSON
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"FIREBASE_CREDENTIALS_JSON contains invalid JSON: {str(e)}. "
+            "Please ensure the JSON is properly formatted."
+        )
+elif FIREBASE_CREDENTIALS_PATH:
+    # Use file path
+    if not os.path.exists(FIREBASE_CREDENTIALS_PATH):
+        raise ValueError(
+            f"Firebase credentials file not found at: {FIREBASE_CREDENTIALS_PATH}. "
+            "Please download your service account key from Firebase Console and place it in the project root, "
+            "or set FIREBASE_CREDENTIALS_JSON with the JSON content in your .env file."
+        )
+else:
     raise ValueError(
-        f"Firebase credentials file not found at: {FIREBASE_CREDENTIALS_PATH}. "
-        "Please download your service account key from Firebase Console and place it in the project root."
+        "Firebase credentials not configured. "
+        "Please set either FIREBASE_CREDENTIALS_PATH (file path) or FIREBASE_CREDENTIALS_JSON (JSON content) in your .env file."
     )
 
 # Initialize Firebase Admin SDK (only once)
@@ -47,7 +70,12 @@ def get_firebase_app() -> firebase_admin.App:
     
     if _firebase_app is None:
         try:
-            cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+            # Use JSON dict if available, otherwise use file path
+            if FIREBASE_CREDENTIALS_DICT:
+                cred = credentials.Certificate(FIREBASE_CREDENTIALS_DICT)
+            else:
+                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+            
             _firebase_app = firebase_admin.initialize_app(cred)
             print(f"✓ Firebase Admin SDK initialized successfully")
             print(f"✓ Token expiration configured: {TOKEN_EXPIRATION_SECONDS} seconds ({TOKEN_EXPIRATION_SECONDS // 60} minutes)")
