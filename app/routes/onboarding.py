@@ -74,11 +74,11 @@ async def get_all_onboarding_data() -> Dict[str, Any]:
             response = supabase.table("onboarding_meal_items_meal_types") \
                 .select("""
                     onboarding_meal_item_id,
-                    is_vegetarian,
-                    is_eggetarian,
-                    is_carnitarian,
-                    is_omnivore,
-                    is_vegan,
+                    can_vegetarian_eat,
+                    can_eggetarian_eat,
+                    can_carnitarian_eat,
+                    can_omnitarian_eat,
+                    can_vegan_eat,
                     onboarding_meal_items!inner(id, name, image_url, is_active),
                     meal_types!inner(id, name)
                 """) \
@@ -101,11 +101,11 @@ async def get_all_onboarding_data() -> Dict[str, Any]:
                     "onboarding_meal_item_image_url": meal_item.get("image_url"),
                     "meal_type_name": meal_type.get("name"),
                     "meal_type_id": meal_type.get("id"),
-                    "is_vegetarian": item.get("is_vegetarian"),
-                    "is_eggetarian": item.get("is_eggetarian"),
-                    "is_carnitarian": item.get("is_carnitarian"),
-                    "is_omnivore": item.get("is_omnivore"),
-                    "is_vegan": item.get("is_vegan")
+                    "can_vegetarian_eat": item.get("can_vegetarian_eat"),
+                    "can_eggetarian_eat": item.get("can_eggetarian_eat"),
+                    "can_carnitarian_eat": item.get("can_carnitarian_eat"),
+                    "can_omnitarian_eat": item.get("can_omnitarian_eat"),
+                    "can_vegan_eat": item.get("can_vegan_eat")
                 }
                 formatted_data.append(formatted_item)
             
@@ -570,11 +570,11 @@ async def get_cuisines() -> Dict[str, Any]:
     - onboarding_meal_item_image_url: Image URL for the meal item
     - meal_type_name: Type of meal (e.g., "Breakfast", "Lunch", "Snacks", "Dinner")
     - meal_type_id: Unique ID of the meal type
-    - is_vegetarian: Boolean flag for vegetarian compatibility
-    - is_eggetarian: Boolean flag for eggetarian compatibility
-    - is_carnitarian: Boolean flag for carnitarian compatibility
-    - is_omnivore: Boolean flag for omnivore compatibility
-    - is_vegan: Boolean flag for vegan compatibility
+    - can_vegetarian_eat: Boolean flag for vegetarian compatibility
+    - can_eggetarian_eat: Boolean flag for eggetarian compatibility
+    - can_carnitarian_eat: Boolean flag for carnitarian compatibility
+    - can_omnitarian_eat: Boolean flag for omnitarian compatibility
+    - can_vegan_eat: Boolean flag for vegan compatibility
     
     Only returns active meal items (is_active = true).
     
@@ -592,11 +592,11 @@ async def get_meal_items() -> Dict[str, Any]:
         - onboarding_meal_item_image_url
         - meal_type_name
         - meal_type_id
-        - is_vegetarian
-        - is_eggetarian
-        - is_carnitarian
-        - is_omnivore
-        - is_vegan
+        - can_vegetarian_eat
+        - can_eggetarian_eat
+        - can_carnitarian_eat
+        - can_omnitarian_eat
+        - can_vegan_eat
         
     Only returns active onboarding_meal_items (is_active = true).
     """
@@ -608,11 +608,11 @@ async def get_meal_items() -> Dict[str, Any]:
         response = supabase.table("onboarding_meal_items_meal_types") \
             .select("""
                 onboarding_meal_item_id,
-                is_vegetarian,
-                is_eggetarian,
-                is_carnitarian,
-                is_omnivore,
-                is_vegan,
+                can_vegetarian_eat,
+                can_eggetarian_eat,
+                can_carnitarian_eat,
+                can_omnitarian_eat,
+                can_vegan_eat,
                 onboarding_meal_items!inner(id, name, image_url, is_active),
                 meal_types!inner(id, name)
             """) \
@@ -631,11 +631,11 @@ async def get_meal_items() -> Dict[str, Any]:
                 "onboarding_meal_item_image_url": meal_item.get("image_url"),
                 "meal_type_name": meal_type.get("name"),
                 "meal_type_id": meal_type.get("id"),
-                "is_vegetarian": item.get("is_vegetarian"),
-                "is_eggetarian": item.get("is_eggetarian"),
-                "is_carnitarian": item.get("is_carnitarian"),
-                "is_omnivore": item.get("is_omnivore"),
-                "is_vegan": item.get("is_vegan")
+                "can_vegetarian_eat": item.get("can_vegetarian_eat"),
+                "can_eggetarian_eat": item.get("can_eggetarian_eat"),
+                "can_carnitarian_eat": item.get("can_carnitarian_eat"),
+                "can_omnitarian_eat": item.get("can_omnitarian_eat"),
+                "can_vegan_eat": item.get("can_vegan_eat")
             }
             formatted_data.append(formatted_item)
         
