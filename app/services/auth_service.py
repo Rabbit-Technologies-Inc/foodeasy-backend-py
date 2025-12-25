@@ -102,8 +102,11 @@ class AuthService:
         Update user's complete onboarding data.
         
         Stores:
-        - Basic info (age, gender, household) in direct columns
-        - All preferences as text/arrays in metadata JSON column
+        - full_name: Direct column in user_profiles table
+        - All other data in metadata JSONB column:
+          - Basic info (age, gender, household)
+          - Onboarding status (onboarding_completed, onboarding_completed_at)
+          - All preferences as text/arrays
         
         Args:
             user_id: UUID of the user
@@ -116,19 +119,29 @@ class AuthService:
             # Get current user data
             user = await self.get_user_by_id(user_id)
             current_metadata = user.get('metadata', {})
+            if not isinstance(current_metadata, dict):
+                current_metadata = {}
             
-            # Separate direct columns from metadata
-            direct_columns = {
+            # Separate full_name (direct column) from metadata fields
+            full_name = onboarding_data.get('full_name')
+            update_columns = {}
+            
+            if full_name is not None:
+                update_columns['full_name'] = full_name
+            
+            # Store everything else in metadata JSONB column
+            metadata_fields = {
+                # Basic demographics
                 'age': onboarding_data.get('age'),
                 'gender': onboarding_data.get('gender'),
                 'total_household_adults': onboarding_data.get('total_household_adults', 1),
                 'total_household_children': onboarding_data.get('total_household_children', 0),
+                
+                # Onboarding status
                 'onboarding_completed': True,
-                'onboarding_completed_at': datetime.utcnow().isoformat()
-            }
-            
-            # Everything else goes to metadata (as text, not IDs)
-            metadata_fields = {
+                'onboarding_completed_at': datetime.utcnow().isoformat(),
+                
+                # Onboarding preferences (as text, not IDs)
                 'goals': onboarding_data.get('goals', []),
                 'medical_restrictions': onboarding_data.get('medical_restrictions', []),
                 'dietary_pattern': onboarding_data.get('dietary_pattern'),
@@ -144,15 +157,13 @@ class AuthService:
                 'extra_input': onboarding_data.get('extra_input', '')
             }
             
-            # Merge with existing metadata
+            # Merge with existing metadata (preserve other custom metadata)
             current_metadata.update(metadata_fields)
+            update_columns['metadata'] = current_metadata
             
-            # Add metadata to direct columns update
-            direct_columns['metadata'] = current_metadata
-            
-            # Update database
+            # Update database with both full_name (if provided) and metadata
             result = self.supabase.table('user_profiles') \
-                .update(direct_columns) \
+                .update(update_columns) \
                 .eq('id', user_id) \
                 .execute()
             
@@ -182,15 +193,20 @@ class AuthService:
     
     async def get_onboarding_status(self, user_id: str) -> Dict[str, Any]:
         """
-        Check if user has completed onboarding
+        Check if user has completed onboarding.
+        
+        Reads onboarding status from metadata JSONB column.
         """
         try:
             user = await self.get_user_by_id(user_id)
+            metadata = user.get('metadata', {})
+            if not isinstance(metadata, dict):
+                metadata = {}
             
             return {
                 'user_id': user_id,
-                'onboarding_completed': user.get('onboarding_completed', False),
-                'onboarding_completed_at': user.get('onboarding_completed_at'),
+                'onboarding_completed': metadata.get('onboarding_completed', False),
+                'onboarding_completed_at': metadata.get('onboarding_completed_at'),
                 'has_name': user.get('full_name') is not None
             }
         except Exception as e:
