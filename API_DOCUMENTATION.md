@@ -264,11 +264,11 @@ Get all onboarding reference data in a single request.
         "onboarding_meal_item_image_url": "https://...",
         "meal_type_name": "Breakfast",
         "meal_type_id": "uuid",
-        "is_vegetarian": true,
-        "is_eggetarian": true,
-        "is_carnitarian": false,
-        "is_omnivore": true,
-        "is_vegan": false
+        "can_vegetarian_eat": true,
+        "can_eggetarian_eat": true,
+        "can_carnitarian_eat": false,
+        "can_omnitarian_eat": true,
+        "can_vegan_eat": false
       }
     ]
   }
@@ -465,11 +465,11 @@ Get all meal items with their meal types and dietary preferences.
       "onboarding_meal_item_image_url": "https://...",
       "meal_type_name": "Breakfast",
       "meal_type_id": "uuid",
-      "is_vegetarian": true,
-      "is_eggetarian": true,
-      "is_carnitarian": false,
-      "is_omnivore": true,
-      "is_vegan": false
+      "can_vegetarian_eat": true,
+      "can_eggetarian_eat": true,
+      "can_carnitarian_eat": false,
+      "can_omnitarian_eat": true,
+      "can_vegan_eat": false
     }
   ]
 }
