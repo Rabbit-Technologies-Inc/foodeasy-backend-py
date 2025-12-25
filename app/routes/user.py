@@ -1,8 +1,9 @@
 # app/routes/user.py
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 from app.services.auth_service import auth_service
+from app.dependencies.auth import verify_user_access
 from typing import Dict, Any, List, Optional
 
 router = APIRouter(prefix="/user", tags=["User Management"])
@@ -108,6 +109,8 @@ class UpdateOnboardingRequest(BaseModel):
     description="""
     Retrieve complete user profile including all data and metadata.
     
+    **Authentication Required:** Bearer token in Authorization header.
+    
     **Returns complete user profile with:**
     - Direct columns: user_id, phone_number, full_name, created_at, last_login
     - Metadata JSONB: Contains all other user data:
@@ -120,7 +123,9 @@ class UpdateOnboardingRequest(BaseModel):
     in the metadata JSONB column, not as separate table columns.
     """
 )
-async def get_user_profile(user_id: str) -> Dict[str, Any]:
+async def get_user_profile(
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """Get complete user profile including metadata"""
     try:
         user = await auth_service.get_user_by_id(user_id)
@@ -147,6 +152,8 @@ async def get_user_profile(user_id: str) -> Dict[str, Any]:
     summary="Update user profile with metadata",
     description="""
     Update user profile including basic fields and metadata.
+    
+    **Authentication Required:** Bearer token in Authorization header.
     
     This endpoint allows updating:
     - Direct columns: full_name (stored in user_profiles table)
@@ -180,7 +187,10 @@ async def get_user_profile(user_id: str) -> Dict[str, Any]:
     ```
     """
 )
-async def update_user_profile(user_id: str, request: UpdateUserProfileRequest) -> Dict[str, Any]:
+async def update_user_profile(
+    request: UpdateUserProfileRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """Update user profile with metadata support"""
     try:
         # Prepare update data
@@ -244,6 +254,8 @@ async def update_user_profile(user_id: str, request: UpdateUserProfileRequest) -
     description="""
     Save all user onboarding selections including full name.
     
+    **Authentication Required:** Bearer token in Authorization header.
+    
     **IMPORTANT:** Send actual TEXT values (names), NOT IDs.
     
     **Accepts:**
@@ -255,7 +267,10 @@ async def update_user_profile(user_id: str, request: UpdateUserProfileRequest) -
     - ❌ "goals": ["goal_id_1", "goal_id_2"]
     """
 )
-async def update_onboarding_data(user_id: str, request: UpdateOnboardingRequest) -> Dict[str, Any]:
+async def update_onboarding_data(
+    request: UpdateOnboardingRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """Save complete onboarding data for user"""
     try:
         onboarding_data = request.dict(exclude_none=True)
@@ -286,6 +301,8 @@ async def update_onboarding_data(user_id: str, request: UpdateOnboardingRequest)
     description="""
     Check if user has completed the onboarding process.
     
+    **Authentication Required:** Bearer token in Authorization header.
+    
     Returns:
     - onboarding_completed: Boolean indicating if onboarding is complete
     - onboarding_completed_at: ISO timestamp when onboarding was completed (if completed)
@@ -294,7 +311,9 @@ async def update_onboarding_data(user_id: str, request: UpdateOnboardingRequest)
     Use this endpoint to determine if user needs to complete onboarding flow.
     """
 )
-async def get_onboarding_status(user_id: str) -> Dict[str, Any]:
+async def get_onboarding_status(
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """Get onboarding completion status"""
     try:
         status_data = await auth_service.get_onboarding_status(user_id)
