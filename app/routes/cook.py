@@ -1,8 +1,9 @@
 # app/routes/cook.py
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 from app.services.cook_service import cook_service
+from app.dependencies.auth import verify_user_access
 from typing import Dict, Any, List, Optional
 
 router = APIRouter(prefix="/cook", tags=["Cook Management"])
@@ -55,9 +56,16 @@ class UpdateCookRequest(BaseModel):
     "/user/{user_id}/cooks",
     status_code=status.HTTP_201_CREATED,
     summary="Add a new cook",
-    description="Add cook details for a user"
+    description="""
+    Add cook details for a user.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    """
 )
-async def add_cook(user_id: str, request: AddCookRequest) -> Dict[str, Any]:
+async def add_cook(
+    request: AddCookRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """
     Add a new cook for the user.
     """
@@ -87,9 +95,15 @@ async def add_cook(user_id: str, request: AddCookRequest) -> Dict[str, Any]:
     "/user/{user_id}/cooks",
     status_code=status.HTTP_200_OK,
     summary="Get all cooks for a user",
-    description="Retrieve all cooks associated with a user"
+    description="""
+    Retrieve all cooks associated with a user.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    """
 )
-async def get_user_cooks(user_id: str) -> Dict[str, Any]:
+async def get_user_cooks(
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """
     Get all cooks for a user.
     """
@@ -113,9 +127,16 @@ async def get_user_cooks(user_id: str) -> Dict[str, Any]:
     "/user/{user_id}/cooks/{cook_id}",
     status_code=status.HTTP_200_OK,
     summary="Get a specific cook",
-    description="Get details of a specific cook"
+    description="""
+    Get details of a specific cook.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    """
 )
-async def get_cook(user_id: str, cook_id: str) -> Dict[str, Any]:
+async def get_cook(
+    cook_id: str,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """
     Get a specific cook by ID.
     """
@@ -143,9 +164,17 @@ async def get_cook(user_id: str, cook_id: str) -> Dict[str, Any]:
     "/user/{user_id}/cooks/{cook_id}",
     status_code=status.HTTP_200_OK,
     summary="Update cook details",
-    description="Update information for a specific cook"
+    description="""
+    Update information for a specific cook.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    """
 )
-async def update_cook(user_id: str, cook_id: str, request: UpdateCookRequest) -> Dict[str, Any]:
+async def update_cook(
+    cook_id: str,
+    request: UpdateCookRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """
     Update cook details.
     """
@@ -175,9 +204,16 @@ async def update_cook(user_id: str, cook_id: str, request: UpdateCookRequest) ->
     "/user/{user_id}/cooks/{cook_id}",
     status_code=status.HTTP_200_OK,
     summary="Delete a cook",
-    description="Remove a cook from the user's list"
+    description="""
+    Remove a cook from the user's list.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    """
 )
-async def delete_cook(user_id: str, cook_id: str) -> Dict[str, Any]:
+async def delete_cook(
+    cook_id: str,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
     """
     Delete a cook.
     """
