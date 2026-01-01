@@ -113,6 +113,36 @@ class SwapMealItemRequest(BaseModel):
         }
 
 
+class AddMealItemRequest(BaseModel):
+    """Request to add a meal item to a meal plan"""
+    user_meal_plan_id: int = Field(..., description="ID of the user meal plan", gt=0)
+    date: str = Field(..., description="Date in YYYY-MM-DD format")
+    meal_type_id: int = Field(..., description="ID of the meal type (breakfast, lunch, snacks, dinner)", gt=0)
+    meal_item_id: int = Field(..., description="ID of the meal item to add", gt=0)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_meal_plan_id": 1,
+                "date": "2024-01-01",
+                "meal_type_id": 1,
+                "meal_item_id": 45
+            }
+        }
+
+
+class RemoveMealItemRequest(BaseModel):
+    """Request to remove a meal item from a meal plan"""
+    user_meal_plan_detail_id: int = Field(..., description="ID of the user_meal_plan_details record to remove", gt=0)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_meal_plan_detail_id": 123
+            }
+        }
+
+
 # ============================================
 # USER ENDPOINTS
 # ============================================
@@ -960,5 +990,213 @@ async def swap_meal_item(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to swap meal item: {str(e)}"
+        )
+
+
+@router.post(
+    "/{user_id}/meal-plans/add-item",
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a meal item to meal plan",
+    description="""
+    Add a new meal item to the user's meal plan for a specific date and meal type.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **Request Body:**
+    ```json
+    {
+      "user_meal_plan_id": 1,
+      "date": "2024-01-01",
+      "meal_type_id": 1,
+      "meal_item_id": 45
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Meal item added successfully",
+      "data": {
+        "id": 456,
+        "user_meal_plan_id": 1,
+        "date": "2024-01-01",
+        "meal_type_id": 1,
+        "meal_item_id": 45,
+        "is_active": true
+      }
+    }
+    ```
+    """
+)
+async def add_meal_item(
+    request: AddMealItemRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
+    """
+    Add a meal item to the meal plan.
+    
+    Returns:
+        Dict containing success status and the created meal plan detail.
+    """
+    supabase = get_supabase_admin()
+    
+    try:
+        # Verify the meal plan exists
+        plan_response = supabase.table("user_meal_plan") \
+            .select("id") \
+            .eq("id", request.user_meal_plan_id) \
+            .execute()
+        
+        if not plan_response.data or len(plan_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Meal plan with id {request.user_meal_plan_id} not found"
+            )
+        
+        # Verify the meal type exists
+        meal_type_response = supabase.table("meal_types") \
+            .select("id") \
+            .eq("id", request.meal_type_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not meal_type_response.data or len(meal_type_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active meal type with id {request.meal_type_id} not found"
+            )
+        
+        # Verify the meal item exists
+        meal_item_response = supabase.table("meal_items") \
+            .select("id") \
+            .eq("id", request.meal_item_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not meal_item_response.data or len(meal_item_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active meal item with id {request.meal_item_id} not found"
+            )
+        
+        # Create new record
+        new_detail_data = {
+            "user_meal_plan_id": request.user_meal_plan_id,
+            "date": request.date,
+            "meal_type_id": request.meal_type_id,
+            "meal_item_id": request.meal_item_id,
+            "is_active": True
+        }
+        
+        new_detail_response = supabase.table("user_meal_plan_details") \
+            .insert(new_detail_data) \
+            .execute()
+        
+        if not new_detail_response.data or len(new_detail_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to add meal item to meal plan"
+            )
+        
+        new_detail = new_detail_response.data[0]
+        
+        return {
+            "success": True,
+            "message": "Meal item added successfully",
+            "data": new_detail
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add meal item: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{user_id}/meal-plans/remove-item",
+    status_code=status.HTTP_200_OK,
+    summary="Remove a meal item from meal plan",
+    description="""
+    Remove a meal item from the user's meal plan by setting is_active = false.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **Request Body:**
+    ```json
+    {
+      "user_meal_plan_detail_id": 123
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Meal item removed successfully",
+      "data": {
+        "user_meal_plan_detail_id": 123,
+        "is_active": false
+      }
+    }
+    ```
+    """
+)
+async def remove_meal_item(
+    request: RemoveMealItemRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
+    """
+    Remove a meal item from the meal plan.
+    
+    Returns:
+        Dict containing success status and removal details.
+    """
+    supabase = get_supabase_admin()
+    
+    try:
+        # Get the existing meal plan detail record
+        existing_detail_response = supabase.table("user_meal_plan_details") \
+            .select("*") \
+            .eq("id", request.user_meal_plan_detail_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not existing_detail_response.data or len(existing_detail_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active meal plan detail with id {request.user_meal_plan_detail_id} not found"
+            )
+        
+        # Set is_active = false
+        update_response = supabase.table("user_meal_plan_details") \
+            .update({"is_active": False}) \
+            .eq("id", request.user_meal_plan_detail_id) \
+            .execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to remove meal item from meal plan"
+            )
+        
+        return {
+            "success": True,
+            "message": "Meal item removed successfully",
+            "data": {
+                "user_meal_plan_detail_id": request.user_meal_plan_detail_id,
+                "is_active": False
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove meal item: {str(e)}"
         )
 
