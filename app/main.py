@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import onboarding, auth, cook, user
+from app.routes import onboarding, auth, cook, user, meal_items
 import os
 from dotenv import load_dotenv
 
@@ -36,6 +36,7 @@ app.include_router(onboarding.router)
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(cook.router)
+app.include_router(meal_items.router)
 
 # Root endpoint
 @app.get("/")
