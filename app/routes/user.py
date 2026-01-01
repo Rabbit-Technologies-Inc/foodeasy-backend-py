@@ -1,8 +1,9 @@
 # app/routes/user.py
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Path
 from pydantic import BaseModel, Field
 from app.services.auth_service import auth_service
+from app.services.supabase_client import get_supabase_admin
 from app.dependencies.auth import verify_user_access
 from typing import Dict, Any, List, Optional
 
@@ -94,6 +95,20 @@ class UpdateOnboardingRequest(BaseModel):
                 "snacks_preferences": ["Samosa"],
                 "dinner_preferences": ["Roti Sabzi"],
                 "extra_input": "I prefer early dinner around 7 PM"
+            }
+        }
+
+
+class SwapMealItemRequest(BaseModel):
+    """Request to swap a meal item in a meal plan"""
+    user_meal_plan_detail_id: int = Field(..., description="ID of the user_meal_plan_details record to swap", gt=0)
+    new_meal_item_id: int = Field(..., description="ID of the new meal item to replace with", gt=0)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_meal_plan_detail_id": 123,
+                "new_meal_item_id": 45
             }
         }
 
@@ -331,5 +346,619 @@ async def get_onboarding_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get onboarding status: {str(e)}"
+        )
+
+
+# ============================================
+# MEAL PLAN HELPER FUNCTIONS
+# ============================================
+
+def _structure_meal_plan_details(details_response_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Helper function to structure meal plan details hierarchically.
+    
+    Args:
+        details_response_data: List of meal plan detail records with joined meal_types and meal_items
+        
+    Returns:
+        List of date objects with hierarchical meal structure
+    """
+    dates_dict = {}
+    
+    for detail in details_response_data:
+        detail_date = detail.get("date")
+        if not detail_date:
+            continue
+        
+        # Initialize date entry if not exists
+        if detail_date not in dates_dict:
+            dates_dict[detail_date] = {}
+        
+        # Get the id from user_meal_plan_details
+        detail_id = detail.get("id")
+        meal_type_id = detail.get("meal_type_id")
+        meal_type_data = detail.get("meal_types")
+        meal_item_data = detail.get("meal_items")
+        
+        # Skip if no meal_type_id
+        if not meal_type_id:
+            continue
+        
+        # Handle meal_type_data - it might be null, a dict, or a list
+        meal_type_info = None
+        if meal_type_data:
+            if isinstance(meal_type_data, list) and len(meal_type_data) > 0:
+                meal_type_info = meal_type_data[0]
+            elif isinstance(meal_type_data, dict):
+                meal_type_info = meal_type_data
+        
+        if not meal_type_info:
+            continue
+        
+        # Initialize meal type entry if not exists
+        if meal_type_id not in dates_dict[detail_date]:
+            dates_dict[detail_date][meal_type_id] = {
+                "id": meal_type_info.get("id"),
+                "name": meal_type_info.get("name"),
+                "description": meal_type_info.get("description"),
+                "is_active": meal_type_info.get("is_active"),
+                "created_at": meal_type_info.get("created_at"),
+                "meal_items": []
+            }
+        
+        # Add meal item if it exists
+        # Note: Each detail record represents one meal item, so we append all items
+        # Multiple items for the same meal type will be in separate detail records
+        if meal_item_data:
+            # Handle meal_item_data - it might be null, a dict, or a list
+            meal_items_to_add = []
+            if isinstance(meal_item_data, list):
+                # If it's a list, add all items
+                meal_items_to_add = meal_item_data
+            elif isinstance(meal_item_data, dict):
+                # If it's a dict, add as single item
+                meal_items_to_add = [meal_item_data]
+            
+            # Add all meal items to the list
+            for meal_item_info in meal_items_to_add:
+                if meal_item_info:
+                    # Remove is_active from meal item for cleaner response
+                    meal_item_clean = {
+                        k: v for k, v in meal_item_info.items() 
+                        if k not in ["is_active"]
+                    }
+                    # Add the user_meal_plan_details id to the meal item
+                    if detail_id is not None:
+                        meal_item_clean["user_meal_plan_detail_id"] = detail_id
+                    dates_dict[detail_date][meal_type_id]["meal_items"].append(meal_item_clean)
+    
+    # Convert to list format
+    dates_list = []
+    for date_str in sorted(dates_dict.keys()):
+        meals_list = []
+        for meal_type_id in sorted(dates_dict[date_str].keys()):
+            meals_list.append(dates_dict[date_str][meal_type_id])
+        
+        dates_list.append({
+            "date": date_str,
+            "meals": meals_list
+        })
+    
+    return dates_list
+
+
+# ============================================
+# MEAL PLAN ENDPOINTS
+# ============================================
+
+@router.get(
+    "/{user_id}/meal-plans",
+    status_code=status.HTTP_200_OK,
+    summary="List user's meal plans",
+    description="""
+    Get a list of all meal plans for a user with optional filters.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **Query Parameters:**
+    - is_active: Filter by active status (true/false)
+    - limit: Maximum number of plans to return (default: 100)
+    - offset: Number of plans to skip for pagination (default: 0)
+    
+    **Response Structure:**
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "start_date": "2024-01-01",
+          "end_date": "2024-01-07",
+          "is_active": true,
+          "created_at": "..."
+        }
+      ],
+      "count": 1
+    }
+    ```
+    
+    **Note:** Currently returns all meal plans. If you need user-specific filtering,
+    add a `user_id` column to the `user_meal_plan` table.
+    """
+)
+async def list_user_meal_plans(
+    user_id: str = Depends(verify_user_access),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    limit: int = Query(100, description="Maximum number of plans to return", ge=1, le=1000),
+    offset: int = Query(0, description="Number of plans to skip", ge=0)
+) -> Dict[str, Any]:
+    """
+    List all meal plans for a user with optional filters.
+    
+    Returns:
+        Dict containing success status and list of meal plans.
+    """
+    supabase = get_supabase_admin()
+    
+    try:
+        query = supabase.table("user_meal_plan") \
+            .select("*", count="exact")
+        
+        # Apply filters
+        if is_active is not None:
+            query = query.eq("is_active", is_active)
+        
+        # Apply pagination
+        query = query.order("created_at", desc=True) \
+            .range(offset, offset + limit - 1)
+        
+        response = query.execute()
+        
+        return {
+            "success": True,
+            "data": response.data,
+            "count": len(response.data),
+            "total": response.count if hasattr(response, 'count') else len(response.data)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch meal plans: {str(e)}"
+        )
+
+
+@router.get(
+    "/{user_id}/meal-plans/{user_meal_plan_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get user meal plan details",
+    description="""
+    Fetch user's meal plan with hierarchical structure:
+    - Date level: Grouped by date
+    - Meal type level: Grouped by meal type within each date
+    - Meal items: List of meal items for each meal type
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **Response Structure:**
+    ```json
+    {
+      "success": true,
+      "dates": [
+        {
+          "date": "2024-01-01",
+          "meals": [
+            {
+              "id": 1,
+              "name": "Breakfast",
+              "description": "...",
+              "meal_items": [
+                {
+                  "id": 1,
+                  "name": "Idli",
+                  "description": "...",
+                  ...
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    ```
+    
+    Only returns active meal plan details (where is_active = true).
+    """
+)
+async def get_user_meal_plan(
+    user_id: str = Depends(verify_user_access),
+    user_meal_plan_id: int = Path(..., description="ID of the user meal plan", gt=0)
+) -> Dict[str, Any]:
+    """
+    Get user meal plan with hierarchical structure.
+    
+    Returns:
+        Dict containing plan information and hierarchical meal plan details.
+    """
+    supabase = get_supabase_admin()
+    
+    try:
+        # Verify meal plan exists
+        plan_response = supabase.table("user_meal_plan") \
+            .select("id") \
+            .eq("id", user_meal_plan_id) \
+            .execute()
+        
+        if not plan_response.data or len(plan_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Meal plan with id {user_meal_plan_id} not found"
+            )
+        
+        # Get meal plan details with joins to meal_types and meal_items
+        # Using Supabase's foreign key relationship syntax
+        details_response = supabase.table("user_meal_plan_details") \
+            .select("""
+                id,
+                date,
+                is_active,
+                meal_type_id,
+                meal_item_id,
+                meal_types (
+                    id,
+                    name,
+                    description,
+                    is_active,
+                    created_at
+                ),
+                meal_items (
+                    id,
+                    name,
+                    description,
+                    image_url,
+                    can_vegetarian_eat,
+                    can_eggetarian_eat,
+                    can_carnitarian_eat,
+                    can_omnitarian_eat,
+                    can_vegan_eat,
+                    is_breakfast,
+                    is_lunch,
+                    is_snacks,
+                    is_dinner,
+                    recipe_link,
+                    created_at
+                )
+            """) \
+            .eq("user_meal_plan_id", user_meal_plan_id) \
+            .eq("is_active", True) \
+            .order("date") \
+            .order("meal_type_id") \
+            .execute()
+        
+        # Structure the data hierarchically using helper function
+        dates_list = _structure_meal_plan_details(details_response.data)
+        
+        return {
+            "success": True,
+            "dates": dates_list
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Log the error in production (you might want to add logging here)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch meal plan: {str(e)}"
+        )
+
+
+@router.get(
+    "/{user_id}/meal-plans/bulk",
+    status_code=status.HTTP_200_OK,
+    summary="Get multiple meal plans with full details",
+    description="""
+    Fetch multiple meal plans with their full hierarchical details.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **Query Parameters:**
+    - plan_ids: Comma-separated list of meal plan IDs (e.g., "1,2,3")
+    - is_active: Filter by active status (true/false) - only used if plan_ids not provided
+    - limit: Maximum number of plans to return (default: 10, max: 50) - only used if plan_ids not provided
+    
+    **Response Structure:**
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "dates": [
+            {
+              "date": "2024-01-01",
+              "meals": [...]
+            }
+          ]
+        }
+      ],
+      "count": 1
+    }
+    ```
+    
+    **Note:** If plan_ids is provided, it takes precedence over is_active and limit filters.
+    """
+)
+async def get_multiple_user_meal_plans(
+    user_id: str = Depends(verify_user_access),
+    plan_ids: Optional[str] = Query(None, description="Comma-separated list of meal plan IDs (e.g., '1,2,3')"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status (only if plan_ids not provided)"),
+    limit: int = Query(10, description="Maximum number of plans to return (only if plan_ids not provided)", ge=1, le=50)
+) -> Dict[str, Any]:
+    """
+    Get multiple meal plans with full hierarchical details.
+    
+    Returns:
+        Dict containing success status and list of meal plans with full details.
+    """
+    supabase = get_supabase_admin()
+    
+    try:
+        # Parse plan IDs if provided
+        plan_id_list = None
+        if plan_ids:
+            try:
+                plan_id_list = [int(id.strip()) for id in plan_ids.split(",") if id.strip()]
+                if not plan_id_list:
+                    raise ValueError("No valid plan IDs provided")
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid plan_ids format: {str(e)}. Expected comma-separated integers."
+                )
+        
+        # Get meal plans
+        if plan_id_list:
+            # Fetch specific plans
+            plans_query = supabase.table("user_meal_plan") \
+                .select("*") \
+                .in_("id", plan_id_list)
+        else:
+            # Fetch plans with filters
+            plans_query = supabase.table("user_meal_plan") \
+                .select("*")
+            
+            if is_active is not None:
+                plans_query = plans_query.eq("is_active", is_active)
+            
+            plans_query = plans_query.order("created_at", desc=True) \
+                .limit(limit)
+        
+        plans_response = plans_query.execute()
+        
+        if not plans_response.data:
+            return {
+                "success": True,
+                "data": [],
+                "count": 0
+            }
+        
+        # Get full details for each plan
+        plans_with_details = []
+        for plan in plans_response.data:
+            plan_id = plan.get("id")
+            
+            # Get meal plan details with joins
+            details_response = supabase.table("user_meal_plan_details") \
+                .select("""
+                    id,
+                    date,
+                    is_active,
+                    meal_type_id,
+                    meal_item_id,
+                    meal_types (
+                        id,
+                        name,
+                        description,
+                        is_active,
+                        created_at
+                    ),
+                    meal_items (
+                        id,
+                        name,
+                        description,
+                        image_url,
+                        can_vegetarian_eat,
+                        can_eggetarian_eat,
+                        can_carnitarian_eat,
+                        can_omnitarian_eat,
+                        can_vegan_eat,
+                        is_breakfast,
+                        is_lunch,
+                        is_snacks,
+                        is_dinner,
+                        recipe_link,
+                        created_at
+                    )
+                """) \
+                .eq("user_meal_plan_id", plan_id) \
+                .eq("is_active", True) \
+                .order("date") \
+                .order("meal_type_id") \
+                .execute()
+            
+            # Structure the data hierarchically
+            dates_list = _structure_meal_plan_details(details_response.data)
+            
+            plans_with_details.append({
+                "dates": dates_list
+            })
+        
+        return {
+            "success": True,
+            "data": plans_with_details,
+            "count": len(plans_with_details)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch meal plans: {str(e)}"
+        )
+
+
+@router.put(
+    "/{user_id}/meal-plans/swap-item",
+    status_code=status.HTTP_200_OK,
+    summary="Swap a meal item in meal plan",
+    description="""
+    Swap a meal item in the user's meal plan.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **How it works:**
+    1. Finds the existing meal plan detail record by `user_meal_plan_detail_id`
+    2. Sets `is_active = false` on the existing record
+    3. Creates a new record with:
+       - Same `date`
+       - Same `user_meal_plan_id`
+       - Same `meal_type_id`
+       - New `meal_item_id`
+       - `is_active = true`
+    
+    **Request Body:**
+    ```json
+    {
+      "user_meal_plan_detail_id": 123,
+      "new_meal_item_id": 45
+    }
+    ```
+    
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Meal item swapped successfully",
+      "data": {
+        "old_detail_id": 123,
+        "new_detail_id": 456,
+        "date": "2024-01-01",
+        "meal_type_id": 1,
+        "old_meal_item_id": 10,
+        "new_meal_item_id": 45
+      }
+    }
+    ```
+    """
+)
+async def swap_meal_item(
+    request: SwapMealItemRequest,
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
+    """
+    Swap a meal item in the meal plan.
+    
+    Returns:
+        Dict containing success status and swap details.
+    """
+    supabase = get_supabase_admin()
+    
+    try:
+        # Get the existing meal plan detail record
+        existing_detail_response = supabase.table("user_meal_plan_details") \
+            .select("*") \
+            .eq("id", request.user_meal_plan_detail_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not existing_detail_response.data or len(existing_detail_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active meal plan detail with id {request.user_meal_plan_detail_id} not found"
+            )
+        
+        existing_detail = existing_detail_response.data[0]
+        
+        # Get the required fields from existing record
+        date = existing_detail.get("date")
+        user_meal_plan_id = existing_detail.get("user_meal_plan_id")
+        meal_type_id = existing_detail.get("meal_type_id")
+        old_meal_item_id = existing_detail.get("meal_item_id")
+        
+        if not all([date, user_meal_plan_id, meal_type_id]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Existing meal plan detail is missing required fields"
+            )
+        
+        # Verify the new meal item exists
+        meal_item_response = supabase.table("meal_items") \
+            .select("id") \
+            .eq("id", request.new_meal_item_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not meal_item_response.data or len(meal_item_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active meal item with id {request.new_meal_item_id} not found"
+            )
+        
+        # Set is_active = false on existing record
+        update_response = supabase.table("user_meal_plan_details") \
+            .update({"is_active": False}) \
+            .eq("id", request.user_meal_plan_detail_id) \
+            .execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to deactivate existing meal plan detail"
+            )
+        
+        # Create new record with new meal_item_id
+        new_detail_data = {
+            "user_meal_plan_id": user_meal_plan_id,
+            "date": date,
+            "meal_type_id": meal_type_id,
+            "meal_item_id": request.new_meal_item_id,
+            "is_active": True
+        }
+        
+        new_detail_response = supabase.table("user_meal_plan_details") \
+            .insert(new_detail_data) \
+            .execute()
+        
+        if not new_detail_response.data or len(new_detail_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create new meal plan detail"
+            )
+        
+        new_detail = new_detail_response.data[0]
+        
+        return {
+            "success": True,
+            "message": "Meal item swapped successfully",
+            "data": {
+                "old_detail_id": request.user_meal_plan_detail_id,
+                "new_detail_id": new_detail.get("id"),
+                "date": date,
+                "meal_type_id": meal_type_id,
+                "old_meal_item_id": old_meal_item_id,
+                "new_meal_item_id": request.new_meal_item_id
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to swap meal item: {str(e)}"
         )
 
