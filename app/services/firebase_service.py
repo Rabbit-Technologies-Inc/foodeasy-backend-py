@@ -77,7 +77,18 @@ def get_firebase_app() -> firebase_admin.App:
                 cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
             
             _firebase_app = firebase_admin.initialize_app(cred)
+            # Get project_id from credentials
+            if FIREBASE_CREDENTIALS_DICT:
+                project_id = FIREBASE_CREDENTIALS_DICT.get('project_id', 'unknown')
+            elif FIREBASE_CREDENTIALS_PATH:
+                import json
+                with open(FIREBASE_CREDENTIALS_PATH, 'r') as f:
+                    cred_data = json.load(f)
+                    project_id = cred_data.get('project_id', 'unknown')
+            else:
+                project_id = 'unknown'
             print(f"✓ Firebase Admin SDK initialized successfully")
+            print(f"✓ Firebase project_id: {project_id}")
             print(f"✓ Token expiration configured: {TOKEN_EXPIRATION_SECONDS} seconds ({TOKEN_EXPIRATION_SECONDS // 60} minutes)")
         except Exception as e:
             raise RuntimeError(f"Failed to initialize Firebase Admin SDK: {str(e)}") from e
@@ -100,10 +111,38 @@ def verify_firebase_token(id_token: str, check_expiration: bool = True) -> dict:
         auth.InvalidIdTokenError: If token is invalid
         auth.ExpiredIdTokenError: If token has expired
     """
+    if not id_token or not isinstance(id_token, str) or len(id_token.strip()) == 0:
+        raise ValueError("ID token is required and must be a non-empty string")
+    
     get_firebase_app()  # Ensure Firebase is initialized
     
     try:
+        # Get project_id from credentials
+        if FIREBASE_CREDENTIALS_DICT:
+            backend_project_id = FIREBASE_CREDENTIALS_DICT.get('project_id', 'unknown')
+        elif FIREBASE_CREDENTIALS_PATH:
+            import json
+            with open(FIREBASE_CREDENTIALS_PATH, 'r') as f:
+                cred_data = json.load(f)
+                backend_project_id = cred_data.get('project_id', 'unknown')
+        else:
+            backend_project_id = 'unknown'
+        
+        print(f"Verifying token with Firebase project: {backend_project_id}")
+        
         decoded_token = auth.verify_id_token(id_token, check_revoked=False)
+        
+        # Log decoded token info (without sensitive data)
+        token_project_id = decoded_token.get('aud', 'unknown')
+        print(f"Token verified. Token project_id (aud): {token_project_id}, Backend project_id: {backend_project_id}")
+        
+        # Check if project IDs match
+        if token_project_id != backend_project_id:
+            print(f"WARNING: Project ID mismatch! Token is from '{token_project_id}' but backend is configured for '{backend_project_id}'")
+            raise auth.InvalidIdTokenError(
+                f"Token project mismatch. Token is from project '{token_project_id}' but backend expects '{backend_project_id}'. "
+                "Make sure your React Native app and backend are using the same Firebase project."
+            )
         
         # Additional expiration check if requested
         if check_expiration:
@@ -116,10 +155,15 @@ def verify_firebase_token(id_token: str, check_expiration: bool = True) -> dict:
         
         return decoded_token
     except auth.InvalidIdTokenError as e:
-        raise auth.InvalidIdTokenError(f"Invalid Firebase token: {str(e)}")
+        print(f"InvalidIdTokenError in verify_firebase_token: {str(e)}")
+        raise
     except auth.ExpiredIdTokenError as e:
-        raise auth.ExpiredIdTokenError(f"Firebase token has expired: {str(e)}")
+        print(f"ExpiredIdTokenError in verify_firebase_token: {str(e)}")
+        raise
     except Exception as e:
+        import traceback
+        print(f"Unexpected error in verify_firebase_token: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
         raise Exception(f"Token verification failed: {str(e)}")
 
 
