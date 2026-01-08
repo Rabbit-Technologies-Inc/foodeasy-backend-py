@@ -2,12 +2,16 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
 from app.routes import onboarding, auth, cook, user, meal_items
 import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Define security scheme for Swagger UI
+security = HTTPBearer()
 
 # Create FastAPI app
 app = FastAPI(
@@ -17,6 +21,54 @@ app = FastAPI(
     docs_url="/docs",  # Swagger UI
     redoc_url="/redoc"  # ReDoc
 )
+
+# Override OpenAPI schema to include Bearer token authentication
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    from fastapi.openapi.utils import get_openapi
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # Add security scheme for Bearer token
+    openapi_schema["components"]["securitySchemes"] = {
+        "Bearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Enter your Firebase ID token. Get it by calling POST /auth/verify-otp with your id_token."
+        }
+    }
+    
+    # Add security requirements to protected endpoints
+    # Protected endpoints are those under /user, /cook paths (except /auth/verify-otp)
+    protected_paths = ["/user", "/cook"]
+    
+    for path, path_item in openapi_schema.get("paths", {}).items():
+        # Check if this is a protected path
+        is_protected = any(path.startswith(protected) for protected in protected_paths)
+        
+        # Skip /auth/verify-otp (it's public)
+        if path == "/auth/verify-otp":
+            continue
+            
+        if is_protected:
+            # Add security requirement to all methods (get, post, put, delete, etc.)
+            for method in ["get", "post", "put", "delete", "patch"]:
+                if method in path_item:
+                    if "security" not in path_item[method]:
+                        path_item[method]["security"] = [{"Bearer": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # CORS middleware (allow frontend to access API)
 cors_origins = os.getenv("CORS_ORIGINS", "*")
