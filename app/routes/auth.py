@@ -135,29 +135,72 @@ async def resend_otp(request: ResendOTPRequest) -> Dict[str, Any]:
 async def verify_otp(request: VerifyTokenRequest) -> VerifyTokenResponse:
     """Verify Firebase token and return user_id."""
     try:
+        # Log token info for debugging (first 20 chars only for security)
+        token_preview = request.id_token[:20] + "..." if len(request.id_token) > 20 else request.id_token
+        print(f"[verify_otp] Verifying token: {token_preview} (length: {len(request.id_token)})")
+        
+        # Validate token format
+        if not request.id_token or not isinstance(request.id_token, str):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="id_token is required and must be a string"
+            )
+        
+        if len(request.id_token.strip()) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="id_token cannot be empty"
+            )
+        
         user_data = await auth_service.verify_and_sync_user(request.id_token)
+        print(f"[verify_otp] Successfully verified and synced user: {user_data.get('user_id')}")
         return VerifyTokenResponse(**user_data)
         
-    except firebase_auth.InvalidIdTokenError:
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except firebase_auth.InvalidIdTokenError as e:
+        import traceback
+        print(f"[verify_otp] InvalidIdTokenError caught: {str(e)}")
+        print(f"[verify_otp] Exception type: {type(e).__name__}")
+        print(f"[verify_otp] Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token. Please try again."
+            detail=f"Invalid token. Please try again. Error: {str(e)}"
         )
-    except firebase_auth.ExpiredIdTokenError:
+    except firebase_auth.ExpiredIdTokenError as e:
+        import traceback
+        print(f"[verify_otp] ExpiredIdTokenError caught: {str(e)}")
+        print(f"[verify_otp] Exception type: {type(e).__name__}")
+        print(f"[verify_otp] Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token expired. Please request new OTP."
+            detail=f"Token expired. Please request new OTP. Error: {str(e)}"
         )
     except ValueError as e:
+        print(f"[verify_otp] ValueError: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
-        print(f"Error in verify_otp: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        error_type = type(e).__name__
+        error_module = type(e).__module__
+        print(f"[verify_otp] Unexpected error: {error_module}.{error_type}: {str(e)}")
+        print(f"[verify_otp] Full traceback: {error_trace}")
+        
+        # Check if it's actually a Firebase auth error that wasn't caught
+        if 'firebase' in error_module.lower() or 'InvalidIdTokenError' in error_type or 'ExpiredIdTokenError' in error_type:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Authentication failed: {str(e)}"
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication failed. Please try again."
+            detail=f"Authentication failed: {str(e)}"
         )
 
 
@@ -183,6 +226,52 @@ async def auth_health_check():
         "supabase": "connected",
         "token_expiration_seconds": TOKEN_EXPIRATION_SECONDS
     }
+
+
+@router.post(
+    "/test-token",
+    status_code=status.HTTP_200_OK,
+    summary="Test token verification (debug endpoint)",
+    description="""
+    Debug endpoint to test token verification directly.
+    This helps diagnose token verification issues.
+    """
+)
+async def test_token_verification(request: VerifyTokenRequest) -> Dict[str, Any]:
+    """Test token verification directly for debugging"""
+    try:
+        from app.services.firebase_service import verify_firebase_token
+        
+        print(f"[test-token] Testing token verification...")
+        decoded_token = verify_firebase_token(request.id_token)
+        
+        return {
+            "success": True,
+            "message": "Token verified successfully",
+            "data": {
+                "uid": decoded_token.get("uid"),
+                "phone_number": decoded_token.get("phone_number"),
+                "project_id": decoded_token.get("aud"),
+                "issued_at": decoded_token.get("iat"),
+                "expires_at": decoded_token.get("exp")
+            }
+        }
+    except firebase_auth.InvalidIdTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}"
+        )
+    except firebase_auth.ExpiredIdTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token expired: {str(e)}"
+        )
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error: {str(e)}\nTraceback: {traceback.format_exc()}"
+        )
 
 
 @router.post(
