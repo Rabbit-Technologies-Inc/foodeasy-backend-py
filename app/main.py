@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from app.routes import onboarding, auth, cook, user, meal_items
+from app.routes import onboarding, auth, cook, user, meal_items, meal_plan
 import os
 from dotenv import load_dotenv
 
@@ -47,8 +47,8 @@ def custom_openapi():
     }
     
     # Add security requirements to protected endpoints
-    # Protected endpoints are those under /user, /cook paths (except /auth/verify-otp)
-    protected_paths = ["/user", "/cook"]
+    # Protected endpoints are those under /user, /cook, /meal-plan paths (except /auth/verify-otp)
+    protected_paths = ["/user", "/cook", "/meal-plan"]
     
     for path, path_item in openapi_schema.get("paths", {}).items():
         # Check if this is a protected path
@@ -89,6 +89,7 @@ app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(cook.router)
 app.include_router(meal_items.router)
+app.include_router(meal_plan.router)
 
 # Root endpoint
 @app.get("/")
