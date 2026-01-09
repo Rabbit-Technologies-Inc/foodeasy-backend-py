@@ -1,6 +1,6 @@
 # app/routes/user.py
 
-from fastapi import APIRouter, HTTPException, status, Depends, Query, Path
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Path, Response
 from pydantic import BaseModel, Field
 from app.services.auth_service import auth_service
 from app.services.supabase_client import get_supabase_admin
@@ -819,8 +819,12 @@ async def get_user_meal_plan(
 @router.get(
     "/{user_id}/meal-plans/bulk",
     status_code=status.HTTP_200_OK,
-    summary="Get multiple meal plans with full details",
+    summary="[DEPRECATED] Get multiple meal plans with full details",
     description="""
+    **⚠️ DEPRECATED:** This endpoint is deprecated and will be removed in a future version.
+    Use `/user/{user_id}/meal-plans/details` instead with the `user_meal_plan_id` query parameter
+    or omit it to get all active meal plans.
+    
     Fetch multiple meal plans with their full hierarchical details.
     
     **Authentication Required:** Bearer token in Authorization header.
@@ -855,15 +859,24 @@ async def get_multiple_user_meal_plans(
     user_id: str = Depends(verify_user_access),
     plan_ids: Optional[str] = Query(None, description="Comma-separated list of meal plan IDs (e.g., '1,2,3')"),
     is_active: Optional[bool] = Query(None, description="Filter by active status (only if plan_ids not provided)"),
-    limit: int = Query(10, description="Maximum number of plans to return (only if plan_ids not provided)", ge=1, le=50)
+    limit: int = Query(10, description="Maximum number of plans to return (only if plan_ids not provided)", ge=1, le=50),
+    response: Response = None
 ) -> Dict[str, Any]:
     """
-    Get multiple meal plans with full hierarchical details.
+    [DEPRECATED] Get multiple meal plans with full hierarchical details.
+    
+    This endpoint is deprecated. Use GET /user/{user_id}/meal-plans/details instead.
     
     Returns:
         Dict containing success status and list of meal plans with full details.
     """
     supabase = get_supabase_admin()
+    
+    # Add deprecation headers
+    if response:
+        response.headers["Deprecation"] = "true"
+        response.headers["Sunset"] = "2025-12-31"
+        response.headers["Link"] = '</user/{user_id}/meal-plans/details>; rel="successor-version"'
     
     try:
         # Parse plan IDs if provided
@@ -959,7 +972,8 @@ async def get_multiple_user_meal_plans(
         return {
             "success": True,
             "data": plans_with_details,
-            "count": len(plans_with_details)
+            "count": len(plans_with_details),
+            "deprecation_warning": "This endpoint is deprecated. Use GET /user/{user_id}/meal-plans/details instead."
         }
         
     except HTTPException:
