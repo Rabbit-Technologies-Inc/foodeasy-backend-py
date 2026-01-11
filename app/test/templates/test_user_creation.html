@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Creation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        .form-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        label .required {
+            color: #e74c3c;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            min-height: 120px;
+        }
+
+        select[multiple] {
+            min-height: 150px;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+            justify-content: flex-end;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-primary:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-backdrop.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 300px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .result-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .result-container.show {
+            display: block;
+        }
+
+        .result-container pre {
+            background: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 30px 0 15px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+            color: #333;
+        }
+
+        .section-title:first-of-type {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Create Test User</h1>
+            <p style="color: #666; margin-top: 8px;">Create a test user without OTP verification with complete onboarding data</p>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div class="form-container">
+            <form id="userCreationForm">
+                <div class="section-title">Basic Information</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="fullName">Full Name <span class="required">*</span></label>
+                        <input type="text" id="fullName" name="fullName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="age">Age</label>
+                        <input type="number" id="age" name="age" min="1" max="120">
+                    </div>
+                    <div class="form-group">
+                        <label for="totalHouseholdAdults">Total Household Adults</label>
+                        <input type="number" id="totalHouseholdAdults" name="totalHouseholdAdults" min="1" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="totalHouseholdChildren">Total Household Children</label>
+                        <input type="number" id="totalHouseholdChildren" name="totalHouseholdChildren" min="0" value="0">
+                    </div>
+                </div>
+
+                <div class="section-title">Goals & Restrictions</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="goals">Goals (Multi-select)</label>
+                        <select id="goals" name="goals" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="medicalRestrictions">Medical Restrictions (Multi-select)</label>
+                        <select id="medicalRestrictions" name="medicalRestrictions" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dietaryPattern">Dietary Pattern</label>
+                        <select id="dietaryPattern" name="dietaryPattern">
+                            <option value="">Select...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="nutritionPreferences">Nutrition Preferences (Multi-select)</label>
+                        <select id="nutritionPreferences" name="nutritionPreferences" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dietaryRestrictions">Dietary Restrictions (Multi-select)</label>
+                        <select id="dietaryRestrictions" name="dietaryRestrictions" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="cuisinesPreferences">Favorite Cuisines (Multi-select)</label>
+                        <select id="cuisinesPreferences" name="cuisinesPreferences" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                </div>
+
+                <div class="section-title">Meal Preferences</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="breakfastPreferences">Breakfast Preferences (Multi-select)</label>
+                        <select id="breakfastPreferences" name="breakfastPreferences" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="lunchPreferences">Lunch Preferences (Multi-select)</label>
+                        <select id="lunchPreferences" name="lunchPreferences" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="snacksPreferences">Snacks Preferences (Multi-select)</label>
+                        <select id="snacksPreferences" name="snacksPreferences" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dinnerPreferences">Dinner Preferences (Multi-select)</label>
+                        <select id="dinnerPreferences" name="dinnerPreferences" multiple>
+                            <option value="">Loading...</option>
+                        </select>
+                        <div class="help-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                </div>
+
+                <div class="section-title">Additional Information</div>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="extraInput">Other Instructions</label>
+                        <textarea id="extraInput" name="extraInput" placeholder="Enter any additional preferences or instructions..."></textarea>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="resetForm()">Reset</button>
+                    <button type="submit" class="btn-primary" id="submitBtn">Create User</button>
+                </div>
+            </form>
+
+            <div id="resultContainer" class="result-container">
+                <h3 style="margin-bottom: 15px;">User Created Successfully:</h3>
+                <pre id="resultContent"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="loadingModal">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <p>Creating user...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/test/user-creation';
+        let onboardingData = null;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadOnboardingData();
+            
+            document.getElementById('userCreationForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                createUser();
+            });
+        });
+
+        async function loadOnboardingData() {
+            try {
+                showLoading();
+                const response = await fetch(`${API_BASE}/onboarding-data`);
+                if (!response.ok) {
+                    throw new Error('Failed to load onboarding data');
+                }
+                const result = await response.json();
+                onboardingData = result.data;
+                populateDropdowns();
+                hideLoading();
+            } catch (error) {
+                hideLoading();
+                showAlert('Error loading onboarding data: ' + error.message, 'error');
+                console.error('Error loading onboarding data:', error);
+            }
+        }
+
+        function populateDropdowns() {
+            if (!onboardingData) return;
+
+            // Populate goals
+            populateMultiSelect('goals', onboardingData.goals || []);
+            
+            // Populate medical restrictions
+            populateMultiSelect('medicalRestrictions', onboardingData.medical_restrictions || []);
+            
+            // Populate dietary patterns
+            populateSelect('dietaryPattern', onboardingData.dietary_patterns || []);
+            
+            // Populate nutrition preferences
+            populateMultiSelect('nutritionPreferences', onboardingData.nutrition_preferences || []);
+            
+            // Populate dietary restrictions
+            populateMultiSelect('dietaryRestrictions', onboardingData.dietary_restrictions || []);
+            
+            // Populate cuisines
+            populateMultiSelect('cuisinesPreferences', onboardingData.cuisines || []);
+            
+            // Filter meal items by meal type and populate
+            const mealItems = onboardingData.meal_items || [];
+            
+            // Filter breakfast items
+            const breakfastItems = mealItems.filter(item => {
+                const mealType = item.meal_type_name || '';
+                return mealType.toLowerCase().includes('breakfast');
+            });
+            populateMultiSelect('breakfastPreferences', breakfastItems.map(item => ({
+                id: item.onboarding_meal_item_id,
+                name: item.onboarding_meal_item_name
+            })));
+            
+            // Filter lunch items
+            const lunchItems = mealItems.filter(item => {
+                const mealType = item.meal_type_name || '';
+                return mealType.toLowerCase().includes('lunch');
+            });
+            populateMultiSelect('lunchPreferences', lunchItems.map(item => ({
+                id: item.onboarding_meal_item_id,
+                name: item.onboarding_meal_item_name
+            })));
+            
+            // Filter snacks items
+            const snacksItems = mealItems.filter(item => {
+                const mealType = item.meal_type_name || '';
+                return mealType.toLowerCase().includes('snack');
+            });
+            populateMultiSelect('snacksPreferences', snacksItems.map(item => ({
+                id: item.onboarding_meal_item_id,
+                name: item.onboarding_meal_item_name
+            })));
+            
+            // Filter dinner items
+            const dinnerItems = mealItems.filter(item => {
+                const mealType = item.meal_type_name || '';
+                return mealType.toLowerCase().includes('dinner');
+            });
+            populateMultiSelect('dinnerPreferences', dinnerItems.map(item => ({
+                id: item.onboarding_meal_item_id,
+                name: item.onboarding_meal_item_name
+            })));
+        }
+
+        function populateSelect(selectId, items) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">Select...</option>';
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.name || item;
+                option.textContent = item.name || item;
+                select.appendChild(option);
+            });
+        }
+
+        function populateMultiSelect(selectId, items) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '';
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.name || item;
+                option.textContent = item.name || item;
+                select.appendChild(option);
+            });
+        }
+
+        function getSelectedValues(selectId) {
+            const select = document.getElementById(selectId);
+            return Array.from(select.selectedOptions).map(option => option.value);
+        }
+
+        async function createUser() {
+            const formData = {
+                full_name: document.getElementById('fullName').value.trim(),
+                age: document.getElementById('age').value ? parseInt(document.getElementById('age').value) : null,
+                total_household_adults: parseInt(document.getElementById('totalHouseholdAdults').value) || 1,
+                total_household_children: parseInt(document.getElementById('totalHouseholdChildren').value) || 0,
+                goals: getSelectedValues('goals'),
+                medical_restrictions: getSelectedValues('medicalRestrictions'),
+                dietary_pattern: document.getElementById('dietaryPattern').value || null,
+                nutrition_preferences: getSelectedValues('nutritionPreferences'),
+                dietary_restrictions: getSelectedValues('dietaryRestrictions'),
+                cuisines_preferences: getSelectedValues('cuisinesPreferences'),
+                breakfast_preferences: getSelectedValues('breakfastPreferences'),
+                lunch_preferences: getSelectedValues('lunchPreferences'),
+                snacks_preferences: getSelectedValues('snacksPreferences'),
+                dinner_preferences: getSelectedValues('dinnerPreferences'),
+                extra_input: document.getElementById('extraInput').value.trim() || null
+            };
+
+            if (!formData.full_name) {
+                showAlert('Please enter a full name', 'error');
+                return;
+            }
+
+            try {
+                showLoading();
+                const response = await fetch(`${API_BASE}/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Failed to create user');
+                }
+
+                hideLoading();
+                showAlert('User created successfully!', 'success');
+                displayResult(result);
+                resetForm();
+            } catch (error) {
+                hideLoading();
+                showAlert('Error creating user: ' + error.message, 'error');
+                console.error('Error creating user:', error);
+            }
+        }
+
+        function displayResult(data) {
+            const container = document.getElementById('resultContainer');
+            const content = document.getElementById('resultContent');
+            
+            container.classList.add('show');
+            content.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function resetForm() {
+            document.getElementById('userCreationForm').reset();
+            document.getElementById('totalHouseholdAdults').value = '1';
+            document.getElementById('totalHouseholdChildren').value = '0';
+            document.getElementById('resultContainer').classList.remove('show');
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        function showLoading() {
+            document.getElementById('loadingModal').classList.add('show');
+            document.getElementById('submitBtn').disabled = true;
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingModal').classList.remove('show');
+            document.getElementById('submitBtn').disabled = false;
+        }
+    </script>
+</body>
+</html>
