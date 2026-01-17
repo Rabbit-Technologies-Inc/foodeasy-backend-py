@@ -1,12 +1,11 @@
 # app/routes/meal_plan.py
 
-from fastapi import APIRouter, HTTPException, status, Path, Depends
+from fastapi import APIRouter, HTTPException, status, Path
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from app.services.meal_generation_service import meal_generation_service
 from app.services.supabase_client import get_supabase_admin
-from app.dependencies.auth import verify_user_access
 
 router = APIRouter(prefix="/meal-plan", tags=["Meal Plan Generation"])
 
@@ -64,7 +63,7 @@ class GenerateMealPlanRequest(BaseModel):
     """
 )
 async def generate_and_store_meal_plan(
-    user_id: str = Depends(verify_user_access),
+    user_id: str = Path(..., description="User ID for meal plan generation"),
     request: GenerateMealPlanRequest = GenerateMealPlanRequest()
 ) -> Dict[str, Any]:
     """
