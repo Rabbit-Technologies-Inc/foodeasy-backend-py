@@ -95,3 +95,54 @@ crontab -l
 ```bash
 crontab -e  # Then remove or comment out the line
 ```
+
+## Available CRON Jobs
+
+### send_meal_messages_to_slack.py
+
+Generates and sends meal messages to Slack for all active users with active meal plans.
+
+**What it does:**
+- Fetches all active users with active meal plans for today
+- For each user, generates messages for breakfast, lunch, snacks, and dinner
+- If user has a cook with non-English language, includes translated text and voice note
+- Sends formatted messages to Slack webhook
+
+**Message format:**
+```
+user_id: <user_id>
+user_name: <user_name>
+meal_type: <breakfast|lunch|snacks|dinner>
+
+Today's <meal_type> is <meal_items>
+
+[Translated text if cook has non-English language]
+
+[Voice Note: Download MP3 link if generated and uploaded]
+```
+
+**Required environment variables:**
+- `SLACK_WEBHOOK_URL`: Slack webhook URL for sending messages
+- Standard Supabase and other service credentials (from `.env` file)
+
+**Optional environment variables (for voice note uploads):**
+- `SLACK_BOT_TOKEN`: Slack bot token (xoxb-...) for uploading MP3 files via Files API (recommended)
+- `SLACK_CHANNEL`: Optional Slack channel ID to post voice notes to
+- `GCS_BUCKET_NAME`: Google Cloud Storage bucket name (fallback if Slack Files API not available)
+
+**Note on voice notes:**
+- Slack webhooks cannot upload files directly
+- If `SLACK_BOT_TOKEN` is provided, voice notes will be uploaded via Slack Files API
+- If not, voice notes will be uploaded to Google Cloud Storage (if `GCS_BUCKET_NAME` is set)
+- If neither is available, voice note info will be included in the message but the file won't be uploaded
+
+**Example CRON entry (run daily at 8:00 AM):**
+```bash
+0 8 * * * cd /Users/utkarshsharmagmail.com/Documents/projects/foodeasy-backend && /Users/utkarshsharmagmail.com/Documents/projects/foodeasy-backend/venv/bin/python cron_jobs/send_meal_messages_to_slack.py >> cron_jobs/logs/meal_messages_slack.log 2>&1
+```
+
+**Test manually:**
+```bash
+cd /Users/utkarshsharmagmail.com/Documents/projects/foodeasy-backend
+/Users/utkarshsharmagmail.com/Documents/projects/foodeasy-backend/venv/bin/python cron_jobs/send_meal_messages_to_slack.py
+```

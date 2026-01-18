@@ -87,6 +87,21 @@ async def generate_and_store_meal_plan(
         # Calculate end date (7 days from start)
         end_date = start_date + timedelta(days=6)
         
+        # Check if a meal plan already exists for this user and date range
+        existing_plan_response = supabase.table("user_meal_plan") \
+            .select("id, start_date, end_date") \
+            .eq("user_id", user_id) \
+            .eq("start_date", start_date.isoformat()) \
+            .eq("end_date", end_date.isoformat()) \
+            .execute()
+        
+        if existing_plan_response.data and len(existing_plan_response.data) > 0:
+            existing_plan = existing_plan_response.data[0]
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A meal plan already exists for this user from {start_date.isoformat()} to {end_date.isoformat()}. Meal plan ID: {existing_plan.get('id')}"
+            )
+        
         # Generate meal plan using the service
         meal_plan_data = await meal_generation_service.generate_meal_plan(
             user_id=user_id,
