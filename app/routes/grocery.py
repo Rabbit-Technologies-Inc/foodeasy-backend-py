@@ -1,7 +1,8 @@
 """
 Grocery Routes
 
-Routes for fetching grocery items required for a user's meal plan.
+Routes for fetching ingredients (groceries) required for a user's meal plan.
+Uses meal_item_ingredients junction table to link meal items to meal_ingredients.
 """
 
 from fastapi import APIRouter, HTTPException, status, Depends
@@ -16,15 +17,15 @@ router = APIRouter(prefix="/grocery", tags=["Grocery"])
 @router.get(
     "/{user_id}",
     status_code=status.HTTP_200_OK,
-    summary="Get grocery items for user's recent meal plan",
+    summary="Get ingredients for user's recent meal plan",
     description="""
-    Get all grocery items with their types required for a user's most recent meal plan.
+    Get all ingredients (groceries) with their types required for a user's most recent meal plan.
     
     This endpoint:
-    1. Fetches the user's most recent meal plan (based on user_id and the highest meal plan id)
+    1. Fetches the user's most recent active meal plan (based on user_id and the highest meal plan id)
     2. Gets all meal items from that meal plan
-    3. Fetches all grocery items required for those meal items
-    4. Groups groceries by their types
+    3. Fetches all ingredients required for those meal items via meal_item_ingredients junction table
+    4. Groups ingredients by their types
     
     **Authentication Required:** Bearer token in Authorization header.
     
@@ -37,16 +38,9 @@ router = APIRouter(prefix="/grocery", tags=["Grocery"])
         "start_date": "2024-01-15",
         "end_date": "2024-01-21",
         "grocery_items_by_type": {
-          "Grains": [
-            {
-              "id": 1,
-              "name": "Rice",
-              "type": "Grains",
-              "type_id": 1,
-              "quantity": "2 kg",
-              "meal_items": [1, 2, 3]
-            }
-          ]
+          "Grains, Cereals & Grain Products": ["Rice", "Wheat Flour"],
+          "Vegetables": ["Tomato", "Onion", "Potato"],
+          "Cooking Oils & Fats": ["Mustard Oil"]
         }
       }
     }
@@ -59,10 +53,10 @@ async def get_user_groceries(
     user_id: str = Depends(verify_user_access)
 ) -> Dict[str, Any]:
     """
-    Get all grocery items with their types required for a user's most recent meal plan.
+    Get all ingredients (groceries) with their types required for a user's most recent meal plan.
     
     Returns:
-        Dict containing success status, meal plan info, and grocery items grouped by type.
+        Dict containing success status, meal plan info, and ingredients grouped by type.
     """
     supabase = get_supabase_admin()
     
@@ -129,144 +123,89 @@ async def get_user_groceries(
                 "message": "No meal items found in the meal plan"
             }
         
-        # Fetch grocery items for these meal items
-        # Try different possible schema patterns:
-        # 1. Junction table: meal_item_groceries (meal_item_id, grocery_item_id)
-        # 2. Direct foreign key: grocery_items.meal_item_id
-        # 3. JSONB array in meal_items
+        # Fetch ingredients for these meal items using the correct schema
+        # Schema: meal_item_ingredients (junction) -> meal_ingredients -> meal_ingredients_types
         
-        grocery_items = []
-        
-        # Try pattern 1: Junction table meal_item_groceries
         try:
-            junction_response = supabase.table("meal_item_groceries") \
+            # Query the junction table with joins to get ingredient details
+            ingredients_response = supabase.table("meal_item_ingredients") \
                 .select("""
-                    grocery_item_id,
+                    id,
                     meal_item_id,
-                    grocery_items (
+                    meal_ingredient_id,
+                    quantity,
+                    unit,
+                    meal_ingredients (
                         id,
                         name,
-                        grocery_type_id,
-                        quantity,
-                        grocery_types (
+                        description,
+                        meal_ingredient_type_id,
+                        meal_ingredients_types (
                             id,
                             name
                         )
                     )
                 """) \
                 .in_("meal_item_id", meal_item_ids) \
+                .eq("is_active", True) \
                 .execute()
             
-            if junction_response.data:
-                # Process junction table results
-                grocery_item_map = {}
-                for junction in junction_response.data:
-                    grocery_item_data = junction.get("grocery_items")
-                    if not grocery_item_data:
+            # Process the results and group by ingredient
+            grocery_item_map = {}
+            
+            if ingredients_response.data:
+                for item in ingredients_response.data:
+                    ingredient_data = item.get("meal_ingredients")
+                    if not ingredient_data:
                         continue
                     
-                    grocery_id = grocery_item_data.get("id")
-                    meal_item_id = junction.get("meal_item_id")
+                    ingredient_id = ingredient_data.get("id")
+                    meal_item_id = item.get("meal_item_id")
                     
-                    if grocery_id not in grocery_item_map:
-                        grocery_type_data = grocery_item_data.get("grocery_types")
-                        grocery_item_map[grocery_id] = {
-                            "id": grocery_id,
-                            "name": grocery_item_data.get("name"),
-                            "type": grocery_type_data.get("name") if grocery_type_data else None,
-                            "type_id": grocery_item_data.get("grocery_type_id"),
-                            "quantity": grocery_item_data.get("quantity"),
+                    if ingredient_id not in grocery_item_map:
+                        ingredient_type_data = ingredient_data.get("meal_ingredients_types")
+                        
+                        # Format quantity with unit
+                        quantity = item.get("quantity")
+                        unit = item.get("unit")
+                        quantity_str = ""
+                        if quantity:
+                            quantity_str = str(quantity)
+                            if unit:
+                                quantity_str += f" {unit}"
+                        
+                        grocery_item_map[ingredient_id] = {
+                            "id": ingredient_id,
+                            "name": ingredient_data.get("name"),
+                            "type": ingredient_type_data.get("name") if ingredient_type_data else "Uncategorized",
+                            "type_id": ingredient_data.get("meal_ingredient_type_id"),
+                            "quantity": quantity_str or None,
+                            "description": ingredient_data.get("description"),
                             "meal_items": []
                         }
                     
-                    grocery_item_map[grocery_id]["meal_items"].append(meal_item_id)
+                    # Add meal item to the list
+                    if meal_item_id and meal_item_id not in grocery_item_map[ingredient_id]["meal_items"]:
+                        grocery_item_map[ingredient_id]["meal_items"].append(meal_item_id)
                 
                 grocery_items = list(grocery_item_map.values())
+            else:
+                grocery_items = []
         
         except Exception as e:
-            # Junction table might not exist, try pattern 2
-            print(f"Junction table pattern failed: {e}")
-            
-            # Try pattern 2: Direct foreign key in grocery_items
-            try:
-                direct_response = supabase.table("grocery_items") \
-                    .select("""
-                        id,
-                        name,
-                        grocery_type_id,
-                        quantity,
-                        meal_item_id,
-                        grocery_types (
-                            id,
-                            name
-                        )
-                    """) \
-                    .in_("meal_item_id", meal_item_ids) \
-                    .execute()
-                
-                if direct_response.data:
-                    grocery_item_map = {}
-                    for item in direct_response.data:
-                        grocery_id = item.get("id")
-                        meal_item_id = item.get("meal_item_id")
-                        
-                        if grocery_id not in grocery_item_map:
-                            grocery_type_data = item.get("grocery_types")
-                            grocery_item_map[grocery_id] = {
-                                "id": grocery_id,
-                                "name": item.get("name"),
-                                "type": grocery_type_data.get("name") if grocery_type_data else None,
-                                "type_id": item.get("grocery_type_id"),
-                                "quantity": item.get("quantity"),
-                                "meal_items": []
-                            }
-                        
-                        if meal_item_id:
-                            grocery_item_map[grocery_id]["meal_items"].append(meal_item_id)
-                    
-                    grocery_items = list(grocery_item_map.values())
-            
-            except Exception as e2:
-                # Try pattern 3: Check if groceries are stored in meal_items as JSONB
-                print(f"Direct foreign key pattern failed: {e2}")
-                
-                # Fetch meal items and check for grocery data
-                meal_items_response = supabase.table("meal_items") \
-                    .select("id, groceries, grocery_items") \
-                    .in_("id", meal_item_ids) \
-                    .execute()
-                
-                if meal_items_response.data:
-                    grocery_item_map = {}
-                    for meal_item in meal_items_response.data:
-                        meal_item_id = meal_item.get("id")
-                        # Check for groceries or grocery_items field (could be JSONB)
-                        groceries_data = meal_item.get("groceries") or meal_item.get("grocery_items")
-                        
-                        if groceries_data:
-                            if isinstance(groceries_data, list):
-                                for grocery in groceries_data:
-                                    if isinstance(grocery, dict):
-                                        grocery_id = grocery.get("id") or grocery.get("grocery_item_id")
-                                        if grocery_id:
-                                            if grocery_id not in grocery_item_map:
-                                                grocery_item_map[grocery_id] = {
-                                                    "id": grocery_id,
-                                                    "name": grocery.get("name"),
-                                                    "type": grocery.get("type") or grocery.get("grocery_type"),
-                                                    "type_id": grocery.get("type_id") or grocery.get("grocery_type_id"),
-                                                    "quantity": grocery.get("quantity"),
-                                                    "meal_items": []
-                                                }
-                                            grocery_item_map[grocery_id]["meal_items"].append(meal_item_id)
-                    
-                    grocery_items = list(grocery_item_map.values())
+            print(f"Error fetching ingredients: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch grocery items: {str(e)}"
+            )
         
-        # Group groceries by type
+        # Group groceries by type (only ingredient names)
         grocery_items_by_type = defaultdict(list)
         for grocery in grocery_items:
             type_name = grocery.get("type") or "Uncategorized"
-            grocery_items_by_type[type_name].append(grocery)
+            ingredient_name = grocery.get("name")
+            if ingredient_name and ingredient_name not in grocery_items_by_type[type_name]:
+                grocery_items_by_type[type_name].append(ingredient_name)
         
         # Convert defaultdict to regular dict for JSON serialization
         grocery_items_by_type = dict(grocery_items_by_type)
