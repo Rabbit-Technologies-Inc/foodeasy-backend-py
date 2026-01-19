@@ -383,6 +383,83 @@ async def get_onboarding_status(
 # MEAL PLAN HELPER FUNCTIONS
 # ============================================
 
+async def _fetch_grocery_items_for_meal_items(meal_item_ids: List[int]) -> Dict[int, Dict[str, List[str]]]:
+    """
+    Fetch grocery items grouped by type for multiple meal items.
+    
+    Args:
+        meal_item_ids: List of meal item IDs to fetch groceries for
+        
+    Returns:
+        Dict mapping meal_item_id to grocery_items_by_type
+        Example: {
+            1: {"Grains": ["Rice", "Wheat"], "Vegetables": ["Tomato"]},
+            2: {"Dairy": ["Milk", "Paneer"]}
+        }
+    """
+    if not meal_item_ids:
+        return {}
+    
+    supabase = get_supabase_admin()
+    
+    try:
+        # Fetch ingredients for these meal items using the junction table
+        ingredients_response = supabase.table("meal_item_ingredients") \
+            .select("""
+                meal_item_id,
+                meal_ingredients (
+                    name,
+                    meal_ingredients_types (
+                        name
+                    )
+                )
+            """) \
+            .in_("meal_item_id", meal_item_ids) \
+            .eq("is_active", True) \
+            .execute()
+        
+        # Group ingredients by meal_item_id and then by type
+        meal_item_groceries = {}
+        
+        if ingredients_response.data:
+            for item in ingredients_response.data:
+                meal_item_id = item.get("meal_item_id")
+                ingredient_data = item.get("meal_ingredients")
+                
+                if not ingredient_data or not meal_item_id:
+                    continue
+                
+                # Initialize dict for this meal item if not exists
+                if meal_item_id not in meal_item_groceries:
+                    meal_item_groceries[meal_item_id] = {}
+                
+                # Get ingredient name and type
+                ingredient_name = ingredient_data.get("name")
+                ingredient_type_data = ingredient_data.get("meal_ingredients_types")
+                
+                if not ingredient_name:
+                    continue
+                
+                # Get type name, default to "Uncategorized"
+                type_name = "Uncategorized"
+                if ingredient_type_data:
+                    type_name = ingredient_type_data.get("name", "Uncategorized")
+                
+                # Add ingredient to the type list
+                if type_name not in meal_item_groceries[meal_item_id]:
+                    meal_item_groceries[meal_item_id][type_name] = []
+                
+                # Avoid duplicates
+                if ingredient_name not in meal_item_groceries[meal_item_id][type_name]:
+                    meal_item_groceries[meal_item_id][type_name].append(ingredient_name)
+        
+        return meal_item_groceries
+        
+    except Exception as e:
+        print(f"Error fetching grocery items for meal items: {e}")
+        return {}
+
+
 def _structure_meal_plan_details(details_response_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Helper function to structure meal plan details hierarchically.
@@ -564,11 +641,12 @@ async def list_user_meal_plans(
     "/{user_id}/meal-plans/details",
     status_code=status.HTTP_200_OK,
     summary="Get user meal plan details",
-    description="""
+    description=    """
     Fetch user's meal plan with hierarchical structure:
     - Date level: Grouped by date
     - Meal type level: Grouped by meal type within each date
     - Meal items: List of meal items for each meal type
+    - Grocery items: Each meal item includes grocery items grouped by their type
     
     **Authentication Required:** Bearer token in Authorization header.
     
@@ -596,6 +674,11 @@ async def list_user_meal_plans(
                   "name": "Idli",
                   "description": "...",
                   "user_meal_plan_detail_id": 123,
+                  "grocery_items_by_type": {
+                    "Grains, Cereals & Grain Products": ["Rice", "Urad Dal"],
+                    "Spices & Condiments": ["Salt"],
+                    "Vegetables": ["Curry Leaves"]
+                  },
                   ...
                 }
               ]
@@ -606,7 +689,9 @@ async def list_user_meal_plans(
     }
     ```
     
-    **Note:** Each meal item includes `user_meal_plan_detail_id` which is the ID from the `user_meal_plan_details` table. This ID can be used for operations like swapping or removing meal items.
+    **Note:** 
+    - Each meal item includes `user_meal_plan_detail_id` which is the ID from the `user_meal_plan_details` table. This ID can be used for operations like swapping or removing meal items.
+    - Each meal item includes `grocery_items_by_type` which contains the ingredient names grouped by their type.
     
     **Response Structure (Multiple Meal Plans):**
     ```json
@@ -624,6 +709,9 @@ async def list_user_meal_plans(
                   "id": 1,
                   "name": "Idli",
                   "user_meal_plan_detail_id": 123,
+                  "grocery_items_by_type": {
+                    "Grains, Cereals & Grain Products": ["Rice", "Urad Dal"]
+                  },
                   ...
                 }
               ]
@@ -638,7 +726,10 @@ async def list_user_meal_plans(
     }
     ```
     
-    **Note:** When multiple meal plans are returned, all dates from all meal plans are combined into a single `dates` array, sorted by date. Each meal item includes `user_meal_plan_detail_id` which is the ID from the `user_meal_plan_details` table.
+    **Note:** 
+    - When multiple meal plans are returned, all dates from all meal plans are combined into a single `dates` array, sorted by date. 
+    - Each meal item includes `user_meal_plan_detail_id` which is the ID from the `user_meal_plan_details` table.
+    - Each meal item includes `grocery_items_by_type` which contains the ingredient names grouped by their type.
     
     Only returns active meal plan details (where is_active = true).
     If no user_meal_plan_id is provided, returns all active meal plans (up to limit).
@@ -721,6 +812,29 @@ async def get_user_meal_plan(
             # Structure the data hierarchically using helper function
             dates_list = _structure_meal_plan_details(details_response.data)
             
+            # Fetch grocery items for all meal items
+            meal_item_ids = []
+            for date_entry in dates_list:
+                for meal in date_entry.get("meals", []):
+                    for meal_item in meal.get("meal_items", []):
+                        meal_item_id = meal_item.get("id")
+                        if meal_item_id:
+                            meal_item_ids.append(meal_item_id)
+            
+            # Fetch grocery items if there are meal items
+            if meal_item_ids:
+                grocery_items_map = await _fetch_grocery_items_for_meal_items(meal_item_ids)
+                
+                # Enrich each meal item with grocery items
+                for date_entry in dates_list:
+                    for meal in date_entry.get("meals", []):
+                        for meal_item in meal.get("meal_items", []):
+                            meal_item_id = meal_item.get("id")
+                            if meal_item_id and meal_item_id in grocery_items_map:
+                                meal_item["grocery_items_by_type"] = grocery_items_map[meal_item_id]
+                            else:
+                                meal_item["grocery_items_by_type"] = {}
+            
             return {
                 "success": True,
                 "dates": dates_list,
@@ -799,6 +913,29 @@ async def get_user_meal_plan(
             # Apply max_dates limit if specified
             if len(all_dates_list) > max_dates:
                 all_dates_list = all_dates_list[:max_dates]
+            
+            # Fetch grocery items for all meal items
+            meal_item_ids = []
+            for date_entry in all_dates_list:
+                for meal in date_entry.get("meals", []):
+                    for meal_item in meal.get("meal_items", []):
+                        meal_item_id = meal_item.get("id")
+                        if meal_item_id:
+                            meal_item_ids.append(meal_item_id)
+            
+            # Fetch grocery items if there are meal items
+            if meal_item_ids:
+                grocery_items_map = await _fetch_grocery_items_for_meal_items(meal_item_ids)
+                
+                # Enrich each meal item with grocery items
+                for date_entry in all_dates_list:
+                    for meal in date_entry.get("meals", []):
+                        for meal_item in meal.get("meal_items", []):
+                            meal_item_id = meal_item.get("id")
+                            if meal_item_id and meal_item_id in grocery_items_map:
+                                meal_item["grocery_items_by_type"] = grocery_items_map[meal_item_id]
+                            else:
+                                meal_item["grocery_items_by_type"] = {}
             
             return {
                 "success": True,
@@ -968,6 +1105,29 @@ async def get_multiple_user_meal_plans(
             
             # Structure the data hierarchically
             dates_list = _structure_meal_plan_details(details_response.data)
+            
+            # Fetch grocery items for all meal items in this plan
+            meal_item_ids = []
+            for date_entry in dates_list:
+                for meal in date_entry.get("meals", []):
+                    for meal_item in meal.get("meal_items", []):
+                        meal_item_id = meal_item.get("id")
+                        if meal_item_id:
+                            meal_item_ids.append(meal_item_id)
+            
+            # Fetch grocery items if there are meal items
+            if meal_item_ids:
+                grocery_items_map = await _fetch_grocery_items_for_meal_items(meal_item_ids)
+                
+                # Enrich each meal item with grocery items
+                for date_entry in dates_list:
+                    for meal in date_entry.get("meals", []):
+                        for meal_item in meal.get("meal_items", []):
+                            meal_item_id = meal_item.get("id")
+                            if meal_item_id and meal_item_id in grocery_items_map:
+                                meal_item["grocery_items_by_type"] = grocery_items_map[meal_item_id]
+                            else:
+                                meal_item["grocery_items_by_type"] = {}
             
             plans_with_details.append({
                 "dates": dates_list
