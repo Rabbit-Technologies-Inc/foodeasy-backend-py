@@ -198,10 +198,17 @@ async def verify_otp(request: VerifyTokenRequest) -> VerifyTokenResponse:
             detail=f"Token expired. Please request new OTP. Error: {str(e)}"
         )
     except ValueError as e:
-        print(f"[verify_otp] ValueError: {str(e)}")
+        error_msg = str(e)
+        print(f"[verify_otp] ValueError: {error_msg}")
+        # Check if user is inactive
+        if "deactivated" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_msg
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=error_msg
         )
     except Exception as e:
         import traceback

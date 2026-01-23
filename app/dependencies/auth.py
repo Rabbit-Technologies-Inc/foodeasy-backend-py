@@ -58,7 +58,7 @@ async def get_current_user_id(
         # Get user_id from Supabase using firebase_uid
         print(f"[get_current_user_id] Looking up user in Supabase with firebase_uid: {firebase_uid}")
         result = auth_service.supabase.table('user_profiles') \
-            .select('id') \
+            .select('id, is_active') \
             .eq('firebase_uid', firebase_uid) \
             .execute()
         
@@ -71,7 +71,18 @@ async def get_current_user_id(
                 detail="User not found. Please complete registration first by calling /auth/verify-otp."
             )
         
-        user_id = result.data[0]['id']
+        user = result.data[0]
+        user_id = user.get('id')
+        
+        # Check if user is inactive
+        is_active = user.get('is_active', True)  # Default to True if field doesn't exist
+        if not is_active:
+            print(f"[get_current_user_id] ERROR: User {user_id} is inactive")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been deactivated. Please contact support."
+            )
+        
         # Ensure user_id is always a string for consistent comparison
         user_id_str = str(user_id)
         print(f"[get_current_user_id] Successfully authenticated user_id: {user_id_str} (type: {type(user_id).__name__})")
