@@ -179,9 +179,16 @@ async def get_user_profile(
             "data": user
         }
     except ValueError as e:
+        error_msg = str(e)
+        # Check if user is inactive
+        if "deactivated" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_msg
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail=error_msg
         )
     except Exception as e:
         print(f"Error in get_user_profile: {str(e)}")
@@ -280,9 +287,16 @@ async def update_user_profile(
             "data": updated_user
         }
     except ValueError as e:
+        error_msg = str(e)
+        # Check if user is inactive
+        if "deactivated" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_msg
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=error_msg
         )
     except Exception as e:
         print(f"Error in update_user_profile: {str(e)}")
@@ -368,14 +382,77 @@ async def get_onboarding_status(
             "data": status_data
         }
     except ValueError as e:
+        error_msg = str(e)
+        # Check if user is inactive
+        if "deactivated" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_msg
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail=error_msg
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get onboarding status: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Deactivate user account",
+    description="""
+    Deactivate a user account by setting is_active to false.
+    
+    **Authentication Required:** Bearer token in Authorization header.
+    
+    **Important:**
+    - This operation sets the user's `is_active` field to `false`
+    - Once deactivated, the user will not be able to access any API endpoints
+    - All API endpoints will return an error message if attempting to access inactive user data
+    - This is a soft delete - user data is preserved but access is restricted
+    
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "User account deactivated successfully",
+      "data": {
+        "user_id": "uuid",
+        "is_active": false
+      }
+    }
+    ```
+    """
+)
+async def deactivate_user(
+    user_id: str = Depends(verify_user_access)
+) -> Dict[str, Any]:
+    """Deactivate user account"""
+    try:
+        deactivated_user = await auth_service.deactivate_user(user_id)
+        
+        return {
+            "success": True,
+            "message": "User account deactivated successfully",
+            "data": {
+                "user_id": user_id,
+                "is_active": False
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        print(f"Error in deactivate_user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to deactivate user: {str(e)}"
         )
 
 

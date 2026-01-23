@@ -38,12 +38,17 @@ class AuthService:
             .execute()
         
         if result.data and len(result.data) > 0:
-            # Existing user - update last_login
+            # Existing user - check if active
             user = result.data[0]
             user_id = user.get('id')
             
             if not user_id:
                 raise ValueError(f"User record found but missing 'id' field. User data: {user}")
+            
+            # Check if user is inactive
+            is_active = user.get('is_active', True)  # Default to True if field doesn't exist
+            if not is_active:
+                raise ValueError("This account has been deactivated. Please contact support.")
             
             print(f"Existing user found: {user_id}")
             
@@ -64,7 +69,8 @@ class AuthService:
             
             new_user_data = {
                 'firebase_uid': firebase_uid,
-                'phone_number': phone_number
+                'phone_number': phone_number,
+                'is_active': True  # New users are active by default
             }
             
             new_user_result = self.supabase.table('user_profiles') \
@@ -194,7 +200,8 @@ class AuthService:
     
     async def get_user_by_id(self, user_id: str) -> Dict[str, Any]:
         """
-        Get user profile by user_id
+        Get user profile by user_id.
+        Raises ValueError if user is inactive.
         """
         result = self.supabase.table('user_profiles') \
             .select('*') \
@@ -204,6 +211,37 @@ class AuthService:
         if not result.data or len(result.data) == 0:
             raise ValueError(f"User not found with user_id: {user_id}")
         
+        user = result.data[0]
+        
+        # Check if user is inactive
+        is_active = user.get('is_active', True)  # Default to True if field doesn't exist
+        if not is_active:
+            raise ValueError("This account has been deactivated. Please contact support.")
+        
+        return user
+    
+    async def deactivate_user(self, user_id: str) -> Dict[str, Any]:
+        """
+        Deactivate a user by setting is_active to False.
+        
+        Args:
+            user_id: UUID of the user to deactivate
+            
+        Returns:
+            dict: Updated user profile with is_active = False
+            
+        Raises:
+            ValueError: If user not found
+        """
+        result = self.supabase.table('user_profiles') \
+            .update({'is_active': False}) \
+            .eq('id', user_id) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise ValueError(f"User not found with user_id: {user_id}")
+        
+        print(f"User {user_id} has been deactivated")
         return result.data[0]
     
     async def get_onboarding_status(self, user_id: str) -> Dict[str, Any]:
