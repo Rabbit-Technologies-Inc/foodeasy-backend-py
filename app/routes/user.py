@@ -488,7 +488,7 @@ async def deactivate_user(
     ```
     
     **Environment Variables Required:**
-    - `PERISKOPE_API_PHONE`: Phone number for Periskope API (e.g., "919952907025")
+    - `PERISKOPE_API_PHONE`: Phone number for Periskope API (e.g., "91995290xxxx")
     - `PERISKOPE_API_TOKEN`: Bearer token for Periskope API authorization
     """
 )
