@@ -55,11 +55,12 @@ async def get_current_user_id(
                 detail="Invalid token: missing user identifier"
             )
         
-        # Get user_id from Supabase using firebase_uid
+        # Get user_id from Supabase using firebase_uid (only active users)
         print(f"[get_current_user_id] Looking up user in Supabase with firebase_uid: {firebase_uid}")
         result = auth_service.supabase.table('user_profiles') \
             .select('id, is_active') \
             .eq('firebase_uid', firebase_uid) \
+            .eq('is_active', True) \
             .execute()
         
         print(f"[get_current_user_id] Supabase query result: {result.data}")
@@ -74,15 +75,7 @@ async def get_current_user_id(
         user = result.data[0]
         user_id = user.get('id')
         
-        # Check if user is inactive
-        is_active = user.get('is_active', True)  # Default to True if field doesn't exist
-        if not is_active:
-            print(f"[get_current_user_id] ERROR: User {user_id} is inactive")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This account has been deactivated. Please contact support."
-            )
-        
+        # User is already filtered to active users only by the query above
         # Ensure user_id is always a string for consistent comparison
         user_id_str = str(user_id)
         print(f"[get_current_user_id] Successfully authenticated user_id: {user_id_str} (type: {type(user_id).__name__})")

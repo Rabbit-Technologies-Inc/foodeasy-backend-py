@@ -31,26 +31,28 @@ class AuthService:
         
         print(f"Verified Firebase user: {firebase_uid}, Phone: {phone_number}")
         
-        # Check if user exists
-        result = self.supabase.table('user_profiles') \
-            .select('*') \
+        # First check if user exists (regardless of active status)
+        # This prevents trying to create duplicate accounts for inactive users
+        all_users_result = self.supabase.table('user_profiles') \
+            .select('id, is_active') \
             .eq('firebase_uid', firebase_uid) \
             .execute()
         
-        if result.data and len(result.data) > 0:
-            # Existing user - check if active
-            user = result.data[0]
+        if all_users_result.data and len(all_users_result.data) > 0:
+            # User exists - check if active
+            user = all_users_result.data[0]
             user_id = user.get('id')
+            is_active = user.get('is_active', True)  # Default to True if field doesn't exist
             
             if not user_id:
                 raise ValueError(f"User record found but missing 'id' field. User data: {user}")
             
-            # Check if user is inactive
-            is_active = user.get('is_active', True)  # Default to True if field doesn't exist
             if not is_active:
+                # User exists but is deactivated
                 raise ValueError("This account has been deactivated. Please contact support.")
             
-            print(f"Existing user found: {user_id}")
+            # Active user - update last_login and return
+            print(f"Existing active user found: {user_id}")
             
             self.supabase.table('user_profiles') \
                 .update({'last_login': datetime.utcnow().isoformat()}) \
@@ -98,7 +100,11 @@ class AuthService:
     async def update_user_profile(self, user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Update user profile (name, metadata, etc.)
+        Only updates active users. Returns updated user data.
         """
+        # Verify user exists and is active before updating
+        await self.get_user_by_id(user_id)
+        
         # Protected fields that cannot be updated
         protected_fields = ['id', 'firebase_uid', 'phone_number', 'created_at']
         clean_data = {k: v for k, v in update_data.items() if k not in protected_fields}
@@ -111,10 +117,11 @@ class AuthService:
         result = self.supabase.table('user_profiles') \
             .update(clean_data) \
             .eq('id', user_id) \
+            .eq('is_active', True) \
             .execute()
         
         if not result.data or len(result.data) == 0:
-            raise ValueError(f"User not found with user_id: {user_id}")
+            raise ValueError(f"User not found with user_id: {user_id} or account has been deactivated")
         
         return result.data[0]
     
@@ -201,23 +208,18 @@ class AuthService:
     async def get_user_by_id(self, user_id: str) -> Dict[str, Any]:
         """
         Get user profile by user_id.
-        Raises ValueError if user is inactive.
+        Only returns active users. Raises ValueError if user not found or inactive.
         """
         result = self.supabase.table('user_profiles') \
             .select('*') \
             .eq('id', user_id) \
+            .eq('is_active', True) \
             .execute()
         
         if not result.data or len(result.data) == 0:
-            raise ValueError(f"User not found with user_id: {user_id}")
+            raise ValueError(f"User not found with user_id: {user_id} or account has been deactivated")
         
         user = result.data[0]
-        
-        # Check if user is inactive
-        is_active = user.get('is_active', True)  # Default to True if field doesn't exist
-        if not is_active:
-            raise ValueError("This account has been deactivated. Please contact support.")
-        
         return user
     
     async def deactivate_user(self, user_id: str) -> Dict[str, Any]:
