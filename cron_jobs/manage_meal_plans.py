@@ -281,11 +281,12 @@ async def get_user_chat_id(user_id: str) -> Optional[str]:
         chat_id string if found, None otherwise
     """
     try:
-        # Get user data using supabase directly (synchronous)
+        # Get user data using supabase directly (synchronous) - only active users
         supabase = get_supabase_admin()
         result = supabase.table('user_profiles') \
             .select('metadata') \
             .eq('id', user_id) \
+            .eq('is_active', True) \
             .execute()
         
         if not result.data or len(result.data) == 0:

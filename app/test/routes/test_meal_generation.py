@@ -251,9 +251,10 @@ async def list_all_users(
     try:
         supabase = get_supabase_admin()
         
-        # Fetch users with pagination
+        # Fetch users with pagination (only active users)
         result = supabase.table('user_profiles') \
             .select('*') \
+            .eq('is_active', True) \
             .order('created_at', desc=True) \
             .range(offset, offset + limit - 1) \
             .execute()
