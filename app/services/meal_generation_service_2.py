@@ -46,14 +46,15 @@ class MealGenerationService:
             Exception: For other database errors
         """
         try:
-            # Fetch user profile from database
+            # Fetch user profile from database (only active users)
             user_result = self.supabase.table('user_profiles') \
                 .select('*') \
                 .eq('id', user_id) \
+                .eq('is_active', True) \
                 .execute()
             
             if not user_result.data or len(user_result.data) == 0:
-                raise ValueError(f"User not found with user_id: {user_id}")
+                raise ValueError(f"User not found with user_id: {user_id} or account has been deactivated")
             
             user = user_result.data[0]
             
