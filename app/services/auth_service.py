@@ -246,6 +246,60 @@ class AuthService:
         print(f"User {user_id} has been deactivated")
         return result.data[0]
     
+    async def hard_delete_user(self, user_id: str) -> None:
+        """
+        Permanently delete a user and all related data.
+        Deletion order: user_meal_plan_details -> user_meal_plan -> cooks -> user_profiles.
+        
+        Args:
+            user_id: UUID of the user to delete
+            
+        Raises:
+            ValueError: If user not found in user_profiles
+        """
+        # Check user exists (any is_active status)
+        check = self.supabase.table('user_profiles') \
+            .select('id') \
+            .eq('id', user_id) \
+            .execute()
+        if not check.data or len(check.data) == 0:
+            raise ValueError(f"User not found with user_id: {user_id}")
+        
+        # Get all user_meal_plan ids for this user
+        plans_result = self.supabase.table('user_meal_plan') \
+            .select('id') \
+            .eq('user_id', user_id) \
+            .execute()
+        plan_ids = [p['id'] for p in (plans_result.data or [])]
+        
+        # Delete user_meal_plan_details for those plans
+        if plan_ids:
+            for plan_id in plan_ids:
+                self.supabase.table('user_meal_plan_details') \
+                    .delete() \
+                    .eq('user_meal_plan_id', plan_id) \
+                    .execute()
+        
+        # Delete user_meal_plan
+        self.supabase.table('user_meal_plan') \
+            .delete() \
+            .eq('user_id', user_id) \
+            .execute()
+        
+        # Delete cooks
+        self.supabase.table('cooks') \
+            .delete() \
+            .eq('user_id', user_id) \
+            .execute()
+        
+        # Delete user_profiles
+        self.supabase.table('user_profiles') \
+            .delete() \
+            .eq('id', user_id) \
+            .execute()
+        
+        print(f"User {user_id} has been hard deleted")
+    
     async def get_onboarding_status(self, user_id: str) -> Dict[str, Any]:
         """
         Check if user has completed onboarding.

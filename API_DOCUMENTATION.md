@@ -483,7 +483,7 @@ Get all meal items with their meal types and dietary preferences.
 
 ## User Management Endpoints
 
-All user endpoints require authentication.
+All user endpoints require authentication, except **DELETE `/user/{user_id}/hard-delete`** (no auth).
 
 ### GET `/user/{user_id}`
 
@@ -712,6 +712,35 @@ Authorization: Bearer <firebase_id_token>
 **Notes:**
 - Use this endpoint to determine if user needs to complete onboarding flow
 - `onboarding_completed_at` is only present if onboarding is completed
+
+---
+
+### DELETE `/user/{user_id}/hard-delete`
+
+Permanently delete a user and all related data. **No authentication required.**
+
+**Headers:** None required.
+
+**Path Parameters:**
+- `user_id` (UUID) - The user ID to permanently delete
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User permanently deleted"
+}
+```
+
+**Status Codes:**
+- `200 OK` - Success
+- `404 Not Found` - User not found
+- `500 Internal Server Error` - Server error
+
+**Notes:**
+- This endpoint does **not** require a Bearer token
+- Permanent delete: removes user from `user_profiles` and all related data (`user_meal_plan`, `user_meal_plan_details`, `cooks`)
+- Operation cannot be undone
 
 ---
 

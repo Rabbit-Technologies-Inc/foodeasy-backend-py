@@ -406,6 +406,52 @@ async def get_onboarding_status(
 
 
 @router.delete(
+    "/{user_id}/hard-delete",
+    status_code=status.HTTP_200_OK,
+    summary="Hard delete user (permanent, no auth)",
+    description="""
+    Permanently delete a user and all related data. No authentication required.
+    
+    **No Authentication:** This endpoint does not require a Bearer token.
+    
+    **Important:**
+    - This is a permanent delete - all user data is removed from the database
+    - Deletes: user_profiles, user_meal_plan, user_meal_plan_details, cooks for this user
+    - Operation cannot be undone
+    
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "User permanently deleted"
+    }
+    ```
+    """
+)
+async def hard_delete_user(
+    user_id: str = Path(..., description="User ID (UUID) to permanently delete")
+) -> Dict[str, Any]:
+    """Hard delete user - permanently remove user and all related data. No auth required."""
+    try:
+        await auth_service.hard_delete_user(user_id)
+        return {
+            "success": True,
+            "message": "User permanently deleted"
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        print(f"Error in hard_delete_user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user: {str(e)}"
+        )
+
+
+@router.delete(
     "/{user_id}",
     status_code=status.HTTP_200_OK,
     summary="Deactivate user account",

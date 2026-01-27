@@ -292,6 +292,7 @@ async function makeAuthenticatedRequest(url, options = {}) {
    - `GET /auth/health` - Health check
    - `GET /onboarding` - Get onboarding reference data
    - `GET /onboarding/*` - All onboarding reference endpoints
+   - `DELETE /user/{user_id}/hard-delete` - Permanently delete user and all related data
 
 ---
 
@@ -787,6 +788,7 @@ GET    /user/{user_id}               - Get user profile
 PUT    /user/{user_id}/profile       - Update user profile
 PUT    /user/{user_id}/onboarding    - Save onboarding data
 GET    /user/{user_id}/onboarding-status - Check onboarding status
+DELETE /user/{user_id}/hard-delete   - Permanently delete user (no auth)
 POST   /cook/user/{user_id}/cooks    - Add cook
 GET    /cook/user/{user_id}/cooks    - Get all cooks
 GET    /cook/user/{user_id}/cooks/{cook_id} - Get specific cook
