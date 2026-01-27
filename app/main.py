@@ -66,6 +66,9 @@ def custom_openapi():
             # Skip /auth/verify-otp (it's public)
             if path == "/auth/verify-otp":
                 continue
+            # Skip user hard-delete (no auth)
+            if "/hard-delete" in path:
+                continue
                 
             if is_protected:
                 # Add security requirement to all methods (get, post, put, delete, etc.)
