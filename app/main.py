@@ -51,20 +51,20 @@ def custom_openapi():
                 "type": "http",
                 "scheme": "bearer",
                 "bearerFormat": "JWT",
-                "description": "Enter your Firebase ID token. Get it by calling POST /auth/verify-otp with your id_token."
+                "description": "Backend JWT from POST /auth/verify-otp (phone_number + otp_code)."
             }
         }
         
         # Add security requirements to protected endpoints
         # Protected endpoints are those under /user, /cook, /meal-plan, /grocery paths (except /auth/verify-otp)
-        protected_paths = ["/user", "/cook", "/meal-plan", "/grocery"]
+        protected_paths = ["/user", "/cook", "/meal-plan", "/meal-messaging", "/grocery"]
         
         for path, path_item in openapi_schema.get("paths", {}).items():
             # Check if this is a protected path
             is_protected = any(path.startswith(protected) for protected in protected_paths)
             
-            # Skip /auth/verify-otp (it's public)
-            if path == "/auth/verify-otp":
+            # Skip public auth endpoints
+            if path in ("/auth/verify-otp", "/auth/send-otp"):
                 continue
             # Skip user hard-delete (no auth)
             if "/hard-delete" in path:
