@@ -557,7 +557,7 @@ Get active meal items with optional filters. Each item includes grocery items (w
 
 ## User Management Endpoints
 
-All user endpoints require authentication, except **DELETE `/user/{user_id}/hard-delete`** (no auth).
+All user endpoints require authentication.
 
 ### GET `/user/{user_id}`
 
@@ -791,12 +791,15 @@ Authorization: Bearer <firebase_id_token>
 
 ### DELETE `/user/{user_id}/hard-delete`
 
-Permanently delete a user and all related data. **No authentication required.**
+Permanently delete a user and all related data. **Authentication required;** the caller must be the user being deleted.
 
-**Headers:** None required.
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
 
 **Path Parameters:**
-- `user_id` (UUID) - The user ID to permanently delete
+- `user_id` (UUID) - The user ID to permanently delete (must match the authenticated user)
 
 **Response:**
 ```json
@@ -808,11 +811,12 @@ Permanently delete a user and all related data. **No authentication required.**
 
 **Status Codes:**
 - `200 OK` - Success
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Token user does not match `user_id`
 - `404 Not Found` - User not found
 - `500 Internal Server Error` - Server error
 
 **Notes:**
-- This endpoint does **not** require a Bearer token
 - Permanent delete: removes user from `user_profiles` and all related data (`user_meal_plan`, `user_meal_plan_details`, `cooks`)
 - Operation cannot be undone
 
