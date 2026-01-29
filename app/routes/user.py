@@ -227,7 +227,7 @@ async def get_user_profile(
     - Existing metadata keys will be updated, new keys will be added
     - To remove a metadata key, set it to null in the update
     
-    **Protected fields:** Cannot update id, firebase_uid, phone_number, or created_at.
+    **Protected fields:** Cannot update id, phone_number, or created_at.
     
     **Example:**
     ```json
