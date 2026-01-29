@@ -16,9 +16,10 @@ FoodEasy is a meal planning application backend API built with FastAPI. The API 
 2. [Root & Health Endpoints](#root--health-endpoints)
 3. [Authentication Endpoints](#authentication-endpoints)
 4. [Onboarding Endpoints](#onboarding-endpoints)
-5. [User Management Endpoints](#user-management-endpoints)
-6. [Cook Management Endpoints](#cook-management-endpoints)
-7. [Error Handling](#error-handling)
+5. [Meal Items Endpoints](#meal-items-endpoints)
+6. [User Management Endpoints](#user-management-endpoints)
+7. [Cook Management Endpoints](#cook-management-endpoints)
+8. [Error Handling](#error-handling)
 
 ---
 
@@ -478,6 +479,79 @@ Get all meal items with their meal types and dietary preferences.
 **Notes:**
 - Only returns active meal items (`is_active = true`)
 - Each meal item includes dietary compatibility flags
+
+---
+
+## Meal Items Endpoints
+
+### GET `/meal-items`
+
+Get active meal items with optional filters. Each item includes grocery items (with tags) and nutrients. Supports pagination via `limit` and `offset`.
+
+**Query parameters (all optional):**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `can_vegetarian_eat` | boolean | — | Filter by vegetarian compatibility |
+| `can_eggetarian_eat` | boolean | — | Filter by eggetarian compatibility |
+| `can_carnitarian_eat` | boolean | — | Filter by carnitarian compatibility |
+| `can_omnitarian_eat` | boolean | — | Filter by omnitarian compatibility |
+| `can_vegan_eat` | boolean | — | Filter by vegan compatibility |
+| `is_breakfast` | boolean | — | Filter by breakfast meal type |
+| `is_lunch` | boolean | — | Filter by lunch meal type |
+| `is_dinner` | boolean | — | Filter by dinner meal type |
+| `is_snacks` | boolean | — | Filter by snacks meal type |
+| `limit` | integer | 50 | Max number of items to return (1–200) |
+| `offset` | integer | 0 | Number of items to skip for pagination |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Idli",
+      "can_vegetarian_eat": true,
+      "can_eggetarian_eat": true,
+      "can_carnitarian_eat": false,
+      "can_omnitarian_eat": true,
+      "can_vegan_eat": false,
+      "is_breakfast": true,
+      "is_lunch": false,
+      "is_dinner": false,
+      "is_snacks": false,
+      "grocery_items": [
+        {
+          "id": 10,
+          "name": "Rice",
+          "type": "Grains, Cereals & Grain Products",
+          "type_id": 1,
+          "tag": "main_item"
+        }
+      ],
+      "nutrients": [
+        { "nutrient": "Protein", "color_hex": "#FF5733" }
+      ]
+    }
+  ],
+  "count": 20,
+  "total": 150,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Response fields:**
+- `data` — Array of meal items (excludes `created_at` and `is_active`)
+- `count` — Number of items in this response
+- `total` — Total number of items matching the filters (for pagination)
+- `limit` — Limit used for the request
+- `offset` — Offset used for the request
+
+**Notes:**
+- Only returns items where `is_active = true`
+- Use `limit` and `offset` to control response size and page through results (e.g. page 2: `?limit=20&offset=20`)
 
 ---
 
