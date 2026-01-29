@@ -1,101 +1,79 @@
 # app/services/auth_service.py
 
 from app.services.supabase_client import get_supabase_admin
-from app.services.firebase_service import verify_firebase_token
-from firebase_admin import auth as firebase_auth
+from app.services.twilio_otp_service import send_otp as twilio_send_otp, verify_otp as twilio_verify_otp
+from app.services.jwt_service import create_access_token
 from typing import Dict, Any, List
 from datetime import datetime
 
 
 class AuthService:
     """
-    Service class for handling phone authentication logic.
-    Manages integration between Firebase Phone Auth and Supabase user storage.
+    Service class for phone authentication via Twilio Verify (OTP) and backend-issued JWT.
+    Users are stored in Supabase; identity is by phone_number.
     """
     
     def __init__(self):
         self.supabase = get_supabase_admin()
     
-    async def verify_and_sync_user(self, id_token: str) -> Dict[str, Any]:
+    def send_otp(self, phone_number: str) -> None:
+        """Send OTP to the given phone number via Twilio Verify (SMS)."""
+        twilio_send_otp(phone_number)
+    
+    async def verify_otp_and_issue_tokens(self, phone_number: str, otp_code: str) -> Dict[str, Any]:
         """
-        Verify Firebase ID token and sync user with Supabase.
+        Verify OTP with Twilio, find or create user in Supabase by phone_number,
+        then issue backend JWT (infinite expiry). Returns user_id, phone_number, is_new_user, access_token.
         """
-        # Verify Firebase token
-        decoded_token = verify_firebase_token(id_token)
+        if not twilio_verify_otp(phone_number, otp_code):
+            raise ValueError("Invalid or expired verification code.")
         
-        firebase_uid = decoded_token.get('uid')
-        phone_number = decoded_token.get('phone_number')
-        
-        if not phone_number:
-            raise ValueError("Phone number not found in Firebase token")
-        
-        print(f"Verified Firebase user: {firebase_uid}, Phone: {phone_number}")
-        
-        # First check if user exists (regardless of active status)
-        # This prevents trying to create duplicate accounts for inactive users
+        # Find user by phone_number (any active status first to handle deactivated)
         all_users_result = self.supabase.table('user_profiles') \
             .select('id, is_active') \
-            .eq('firebase_uid', firebase_uid) \
+            .eq('phone_number', phone_number) \
             .execute()
         
         if all_users_result.data and len(all_users_result.data) > 0:
-            # User exists - check if active
             user = all_users_result.data[0]
             user_id = user.get('id')
-            is_active = user.get('is_active', True)  # Default to True if field doesn't exist
-            
+            is_active = user.get('is_active', True)
             if not user_id:
-                raise ValueError(f"User record found but missing 'id' field. User data: {user}")
-            
+                raise ValueError(f"User record missing 'id'. User data: {user}")
             if not is_active:
-                # User exists but is deactivated
                 raise ValueError("This account has been deactivated. Please contact support.")
-            
-            # Active user - update last_login and return
             print(f"Existing active user found: {user_id}")
-            
             self.supabase.table('user_profiles') \
                 .update({'last_login': datetime.utcnow().isoformat()}) \
                 .eq('id', user_id) \
                 .execute()
-            
-            # Ensure all fields are correct types
-            return {
-                'user_id': str(user_id),  # Ensure it's a string
-                'phone_number': str(phone_number),  # Ensure it's a string
-                'is_new_user': False
-            }
+            is_new_user = False
         else:
-            # New user - create with phone only
             print(f"Creating new user for: {phone_number}")
-            
             new_user_data = {
-                'firebase_uid': firebase_uid,
                 'phone_number': phone_number,
-                'is_active': True  # New users are active by default
+                'is_active': True,
             }
-            
             new_user_result = self.supabase.table('user_profiles') \
                 .insert(new_user_data) \
                 .execute()
-            
             if not new_user_result.data or len(new_user_result.data) == 0:
                 raise ValueError("Failed to create new user - no data returned from Supabase")
-            
             new_user = new_user_result.data[0]
             user_id = new_user.get('id')
-            
             if not user_id:
-                raise ValueError(f"New user created but missing 'id' field. User data: {new_user}")
-            
+                raise ValueError(f"New user created but missing 'id'. User data: {new_user}")
             print(f"New user created: {user_id}")
-            
-            # Ensure all fields are correct types
-            return {
-                'user_id': str(user_id),  # Ensure it's a string
-                'phone_number': str(phone_number),  # Ensure it's a string
-                'is_new_user': True
-            }
+            is_new_user = True
+        
+        user_id_str = str(user_id)
+        access_token = create_access_token(user_id_str, phone_number)
+        return {
+            'user_id': user_id_str,
+            'phone_number': phone_number,
+            'is_new_user': is_new_user,
+            'access_token': access_token,
+        }
     
     async def update_user_profile(self, user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -106,7 +84,7 @@ class AuthService:
         await self.get_user_by_id(user_id)
         
         # Protected fields that cannot be updated
-        protected_fields = ['id', 'firebase_uid', 'phone_number', 'created_at']
+        protected_fields = ['id', 'phone_number', 'created_at']
         clean_data = {k: v for k, v in update_data.items() if k not in protected_fields}
         
         if not clean_data:
