@@ -8,14 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Periskope API configuration
-PERISKOPE_API_BASE_URL = os.getenv("PERISKOPE_API_BASE_URL", "https://api.periskope.app/v1")
+PERISKOPE_API_BASE_URL = os.getenv("PERISKOPE_API_BASE_URL")
 PERISKOPE_API_TOKEN = os.getenv("PERISKOPE_API_TOKEN")
 PERISKOPE_PHONE_NUMBER = os.getenv("PERISKOPE_PHONE_NUMBER")
 
 # Default image URL for Foodeasy groups
 FOODEASY_GROUP_IMAGE_URL = os.getenv(
-    "FOODEASY_GROUP_IMAGE_URL",
-    "https://snhkiahxmwkkartmuysu.supabase.co/storage/v1/object/public/foodeasy-images/foodeasy.jpeg"
+    "FOODEASY_GROUP_IMAGE_URL"
 )
 
 
