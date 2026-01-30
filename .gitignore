@@ -74,6 +74,9 @@ docs/_build/
 # Project docs (internal)
 docs/
 
+# Voice MP3s
+voice_mp3s/
+
 # PyBuilder
 .pybuilder/
 target/
