@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-Cron job to send soaking reminders to users.
+Cron job to send soaking reminders to users (shared logic for both jobs).
 
 For meals that have ingredients requiring soaking (meal_item_ingredients.is_soaking_item = true),
 sends English + Hindi text and voice note via WhatsApp (same pattern as meal reminders).
 
-SOAKING_FOR (what to send):
-   - today_dinner: target_date dinner only. "Today's Dinner contains X. Please soak Y."
-   - tomorrow_meals: target_date+1 breakfast, lunch, snacks. "Tomorrow's Breakfast contains X. Please soak Y."
+Single command (Railway server is UTC; send times are IST):
+   Schedule at 5am IST and 5pm IST using UTC cron. The script uses IST to pick the job:
+   - 5am IST (23:30 UTC previous day): today's dinner soaking reminders.
+   - 5pm IST (11:30 UTC same day): tomorrow's breakfast, lunch, snacks soaking reminders.
+
+   Command:  python cron_jobs/send_soaking_reminders.py
+   Cron:     30 23 * * *  and  30 11 * * *
+
+   Optional: pass tomorrow_meals or today_dinner to force a mode; or set SOAKING_FOR env.
 
 Environment Variables: same as send_meal_reminders (translation, TTS, Periskope, Slack, VOICE_MP3S_DIR).
-   - SOAKING_FOR: "today_dinner" (default) or "tomorrow_meals".
 
 When text/voice send fails, the Slack alert and result "error" field show the reason, e.g.:
    - No chat_id: user_profiles.metadata missing whatsapp_group_metadata.group_metadata.id
@@ -21,8 +26,15 @@ When text/voice send fails, the Slack alert and result "error" field show the re
 import sys
 import os
 import base64
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
+
+try:
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
+except ImportError:
+    # Python < 3.9: use fixed UTC+5:30 for IST
+    IST = timezone(timedelta(hours=5, minutes=30))
 
 import asyncio
 import httpx
@@ -405,12 +417,23 @@ async def process_user_soaking_reminders(
     return results
 
 
+def _now_ist() -> datetime:
+    """Current time in IST (Asia/Kolkata)."""
+    return datetime.now(IST)
+
+
+def _is_evening_ist() -> bool:
+    """True if current IST time is noon or later (evening/afternoon). Used to avoid sending today's dinner reminder in the evening IST."""
+    return _now_ist().hour >= 12
+
+
 async def run_soaking_reminders(
     target_date: Optional[date] = None,
     soaking_for: str = SOAKING_FOR_TODAY_DINNER,
 ) -> Dict[str, Any]:
     """
     soaking_for: today_dinner = target_date dinner, "Today's ..."; tomorrow_meals = target_date+1 breakfast/lunch/snacks, "Tomorrow's ...".
+    Today's dinner reminders are never sent in the evening IST (noon or later); the job exits without sending.
     """
     if target_date is None:
         target_date = date.today()
@@ -422,6 +445,19 @@ async def run_soaking_reminders(
         soaking_for_tomorrow = True
         print(f"[{datetime.now().isoformat()}] Soaking reminders for {soaking_date.isoformat()} (breakfast, lunch, snacks)")
     else:
+        # Today's dinner: do not send in the evening IST. Intended for 5am IST only.
+        if _is_evening_ist():
+            print(f"[{datetime.now().isoformat()}] Skipping today's dinner soaking reminder (evening IST); run at 5am IST only.")
+            return {
+                "success": True,
+                "date": target_date.isoformat(),
+                "soaking_for": soaking_for,
+                "users_processed": 0,
+                "reminders_generated": 0,
+                "results": [],
+                "timestamp": datetime.now().isoformat(),
+                "skipped": "evening_ist",
+            }
         soaking_date = target_date
         soaking_meal_types = ["dinner"]
         soaking_for_tomorrow = False
@@ -500,8 +536,15 @@ async def run_soaking_reminders(
 
 
 if __name__ == "__main__":
-    soaking_for = os.getenv("SOAKING_FOR", SOAKING_FOR_TODAY_DINNER).strip().lower()
-    if soaking_for != SOAKING_FOR_TOMORROW_MEALS:
+    # Single command: no args → pick mode from IST (morning IST = today_dinner, evening IST = tomorrow_meals).
+    mode = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower() or os.getenv("SOAKING_FOR", "")
+    if not mode:
+        mode = SOAKING_FOR_TOMORROW_MEALS if _is_evening_ist() else SOAKING_FOR_TODAY_DINNER
+        now_ist = _now_ist()
+        print(f"[{datetime.now().isoformat()}] Auto mode: {mode} (IST {now_ist.strftime('%H:%M')}, hour {'>= 12' if _is_evening_ist() else '< 12'})")
+    if mode == SOAKING_FOR_TOMORROW_MEALS:
+        soaking_for = SOAKING_FOR_TOMORROW_MEALS
+    else:
         soaking_for = SOAKING_FOR_TODAY_DINNER
     result = asyncio.run(run_soaking_reminders(soaking_for=soaking_for))
     sys.exit(0 if result.get("success", False) else 1)
