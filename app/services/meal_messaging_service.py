@@ -141,7 +141,7 @@ class MealMessagingService:
             .select("""
                 meal_type_id,
                 meal_types (id, name),
-                meal_items (id, name)
+                meal_items (id, name, recipe_link)
             """) \
             .eq("user_meal_plan_id", user_meal_plan_id) \
             .eq("date", date_str) \
@@ -165,26 +165,37 @@ class MealMessagingService:
             
             meal_type_name = meal_type_info.get("name", "").lower()
             meal_item_name = meal_item_info.get("name", "")
+            recipe_link = meal_item_info.get("recipe_link")
             
             if meal_type_name and meal_item_name:
                 if meal_type_name not in meals_by_type:
                     meals_by_type[meal_type_name] = []
-                meals_by_type[meal_type_name].append(meal_item_name)
+                meals_by_type[meal_type_name].append({
+                    "name": meal_item_name,
+                    "recipe_link": recipe_link if recipe_link else None,
+                })
         
         return meals_by_type
     
-    def _format_meal_message(self, meal_type: str, meal_items: List[str]) -> str:
-        """Format a message for a specific meal type."""
+    def _format_meal_message(self, meal_type: str, meal_items: List[Any]) -> str:
+        """Format a message for a specific meal type. meal_items can be list of strings or list of dicts with 'name' key."""
         if not meal_items:
             return ""
-        
-        if len(meal_items) == 1:
-            items_text = meal_items[0]
-        elif len(meal_items) == 2:
-            items_text = f"{meal_items[0]} and {meal_items[1]}"
+        names = []
+        for m in meal_items:
+            if isinstance(m, dict):
+                names.append(m.get("name", "") or "")
+            else:
+                names.append(str(m))
+        names = [n for n in names if n]
+        if not names:
+            return ""
+        if len(names) == 1:
+            items_text = names[0]
+        elif len(names) == 2:
+            items_text = f"{names[0]} and {names[1]}"
         else:
-            items_text = ", ".join(meal_items[:-1]) + f", and {meal_items[-1]}"
-        
+            items_text = ", ".join(names[:-1]) + f", and {names[-1]}"
         return f"Today's {meal_type.capitalize()} is {items_text}"
     
     async def _generate_voice_note(self, text: str) -> Optional[Dict[str, Any]]:

@@ -264,6 +264,24 @@ async def process_user_meal_reminders(
             })
             continue
 
+        # Build recipe lines: Recipe (रेसिपी): Name (Hindi name) url
+        recipe_lines = []
+        for item in items:
+            recipe_link = item.get("recipe_link") if isinstance(item, dict) else None
+            if not recipe_link:
+                continue
+            name = item.get("name", "") if isinstance(item, dict) else str(item)
+            if not name:
+                continue
+            try:
+                item_trans = await translation_service.translate_async(
+                    name, target_language=TARGET_LANGUAGE, source_language="en"
+                )
+                hindi_name = (item_trans.translated or name).strip()
+            except Exception:
+                hindi_name = name
+            recipe_lines.append(f"Recipe (रेसिपी): {name} ({hindi_name}) {recipe_link}")
+
         # Hindi text -> Hindi speech via ElevenLabs
         audio_path = None
         err = None
@@ -285,6 +303,8 @@ async def process_user_meal_reminders(
         sent_audio = False
         if chat_id:
             combined_message = f"{english_text}\n\n{hindi_text}"
+            if recipe_lines:
+                combined_message += "\n\n" + "\n".join(recipe_lines)
             sent_text = await send_whatsapp_message(chat_id, combined_message)
             if audio_path:
                 sent_audio = await send_whatsapp_audio(chat_id, audio_path)
