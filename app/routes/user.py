@@ -1169,6 +1169,7 @@ async def get_user_meal_plan(
                         name,
                         description,
                         image_url,
+                        image_url_webp,
                         can_vegetarian_eat,
                         can_eggetarian_eat,
                         can_carnitarian_eat,
