@@ -6,6 +6,7 @@ from app.services.auth_service import auth_service
 from app.services.supabase_client import get_supabase_admin
 from app.dependencies.auth import verify_user_access
 from typing import Dict, Any, List, Optional
+from datetime import datetime, date, timezone, timedelta
 import httpx
 import os
 from dotenv import load_dotenv
@@ -1133,6 +1134,10 @@ async def get_user_meal_plan(
     """
     supabase = get_supabase_admin()
     
+    # Calculate "today" in IST (server runs in UTC)
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    today_ist = datetime.now(ist_tz).date()
+    
     try:
         # If user_meal_plan_id is provided, return single meal plan
         if user_meal_plan_id is not None:
@@ -1191,6 +1196,26 @@ async def get_user_meal_plan(
             
             # Structure the data hierarchically using helper function
             dates_list = _structure_meal_plan_details(details_response.data)
+
+            # Filter out past dates based on IST "today"
+            filtered_dates = []
+            for date_entry in dates_list:
+                date_str = date_entry.get("date")
+                if not date_str:
+                    continue
+                # Handle both pure dates ("YYYY-MM-DD") and full ISO datetimes
+                try:
+                    entry_date = date.fromisoformat(date_str)
+                except ValueError:
+                    try:
+                        entry_date = datetime.fromisoformat(
+                            date_str.replace("Z", "+00:00")
+                        ).date()
+                    except Exception:
+                        continue
+                if entry_date >= today_ist:
+                    filtered_dates.append(date_entry)
+            dates_list = filtered_dates
             
             # Fetch grocery items and nutrients for all meal items
             meal_item_ids = []
@@ -1296,6 +1321,26 @@ async def get_user_meal_plan(
             
             # Structure all dates hierarchically (combines dates from all meal plans)
             all_dates_list = _structure_meal_plan_details(all_details_data)
+
+            # Filter out past dates based on IST "today"
+            filtered_dates = []
+            for date_entry in all_dates_list:
+                date_str = date_entry.get("date")
+                if not date_str:
+                    continue
+                # Handle both pure dates ("YYYY-MM-DD") and full ISO datetimes
+                try:
+                    entry_date = date.fromisoformat(date_str)
+                except ValueError:
+                    try:
+                        entry_date = datetime.fromisoformat(
+                            date_str.replace("Z", "+00:00")
+                        ).date()
+                    except Exception:
+                        continue
+                if entry_date >= today_ist:
+                    filtered_dates.append(date_entry)
+            all_dates_list = filtered_dates
             
             # Apply max_dates limit if specified
             if len(all_dates_list) > max_dates:
