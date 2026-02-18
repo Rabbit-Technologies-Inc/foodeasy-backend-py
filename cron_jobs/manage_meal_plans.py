@@ -5,7 +5,7 @@ Cron job to manage user meal plans.
 This script:
 1. Fetches all active meal plans from the database
 2. Inactivates meal plans where end_date < today (sets is_active = False)
-3. Generates new meal plans for users whose meal plan end_date is exactly 2 days before today
+3. Generates new meal plans for users whose meal plan end_date is exactly 2 days from today
    (new meal plan start_date = old end_date + 1 day)
 4. Sends WhatsApp notification to users when their new meal plan is generated (if chat_id is available)
 5. Logs the results
@@ -152,12 +152,13 @@ async def generate_and_store_meal_plan(user_id: str, start_date: date) -> Option
         # Calculate end date (7 days from start)
         end_date = start_date + timedelta(days=6)
         
-        # Check if a meal plan already exists for this user and date range
+        # Check if an ACTIVE meal plan already exists for this user and date range
         existing_plan_response = supabase.table("user_meal_plan") \
-            .select("id, start_date, end_date") \
+            .select("id, start_date, end_date, is_active") \
             .eq("user_id", user_id) \
             .eq("start_date", start_date.isoformat()) \
             .eq("end_date", end_date.isoformat()) \
+            .eq("is_active", True) \
             .execute()
         
         if existing_plan_response.data and len(existing_plan_response.data) > 0:
@@ -201,6 +202,9 @@ async def generate_and_store_meal_plan(user_id: str, start_date: date) -> Option
         total_meals = 0
         
         for day_plan in meal_plan_data.get("meal_plan", []):
+            # Support both legacy and new meal plan formats:
+            # Legacy:  { "date": "...", "breakfast": [...], "lunch": [...], ... }
+            # New:     { "day": 1, "date": "...", "meals": { "breakfast": [...], "lunch": [...], ... } }
             day_date = day_plan.get("date")
             if not day_date:
                 continue
@@ -215,9 +219,13 @@ async def generate_and_store_meal_plan(user_id: str, start_date: date) -> Option
                     print(f"Invalid date format: {day_date}")
                     continue
             
+            # Determine where the meals live (top-level vs nested under "meals")
+            meals_container = day_plan.get("meals") or day_plan
+
             # Process each meal type
-            for meal_type_name, meal_items in day_plan.items():
-                if meal_type_name == "date" or not meal_items:
+            for meal_type_name, meal_items in meals_container.items():
+                # Skip non-meal keys
+                if meal_type_name in ("date", "day") or not meal_items:
                     continue
                 
                 meal_type_id = meal_type_mapping.get(meal_type_name.lower())
@@ -394,7 +402,7 @@ async def manage_meal_plans() -> Dict[str, Any]:
     """
     Main function to manage meal plans:
     1. Inactivate meal plans where end_date < today
-    2. Generate new meal plans for users whose meal plan end_date is 2 days before today
+    2. Generate new meal plans for users whose meal plan end_date is 2 days from today
     
     Returns:
         Dictionary with summary statistics
@@ -403,7 +411,7 @@ async def manage_meal_plans() -> Dict[str, Any]:
     
     try:
         today = date.today()
-        two_days_ago = today - timedelta(days=2)
+        two_days_from_now = today + timedelta(days=2)
         
         # Get all active meal plans
         meal_plans = get_all_active_meal_plans()
@@ -463,8 +471,8 @@ async def manage_meal_plans() -> Dict[str, Any]:
                     })
                     print(f"Inactivated meal plan {meal_plan_id} for user {user_id} (end_date: {end_date_str})")
             
-            # Check if meal plan should trigger new generation (end_date = today - 2 days)
-            elif end_date == two_days_ago:
+            # Check if meal plan should trigger new generation (end_date = today + 2 days)
+            elif end_date == two_days_from_now:
                 new_start_date = end_date + timedelta(days=1)
                 plans_to_generate.append({
                     "user_id": user_id,
