@@ -230,7 +230,7 @@ async def _fetch_nutrients_for_meal_items(meal_item_ids: List[int]) -> Dict[int,
     - is_snacks: Filter by snacks meal type (true/false)
     
     **Pagination:**
-    - limit: Max number of items to return (default 50, max 200).
+    - limit: Max number of items to return (default 50, max 500).
     - offset: Number of items to skip for pagination (default 0).
     
     **Note:** All filters are optional. If no filters are provided, all active meal items are returned.
@@ -256,7 +256,7 @@ async def get_meal_items(
     is_lunch: Optional[bool] = Query(None, description="Filter by lunch meal type"),
     is_dinner: Optional[bool] = Query(None, description="Filter by dinner meal type"),
     is_snacks: Optional[bool] = Query(None, description="Filter by snacks meal type"),
-    limit: int = Query(50, ge=1, le=200, description="Max number of items to return"),
+    limit: int = Query(50, ge=1, le=500, description="Max number of items to return"),
     offset: int = Query(0, ge=0, description="Number of items to skip for pagination")
 ) -> Dict[str, Any]:
     """

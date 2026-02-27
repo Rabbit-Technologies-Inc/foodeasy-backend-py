@@ -501,7 +501,7 @@ Get active meal items with optional filters. Each item includes grocery items (w
 | `is_lunch` | boolean | — | Filter by lunch meal type |
 | `is_dinner` | boolean | — | Filter by dinner meal type |
 | `is_snacks` | boolean | — | Filter by snacks meal type |
-| `limit` | integer | 50 | Max number of items to return (1–200) |
+| `limit` | integer | 50 | Max number of items to return (1–500) |
 | `offset` | integer | 0 | Number of items to skip for pagination |
 
 **Response:**
